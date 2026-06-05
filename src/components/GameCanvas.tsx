@@ -394,51 +394,84 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
     };
 
-    // DRAW FLAT GROUND GRAPHICS (Pre-painted directly under the painter list)
+    // DRAW FLAT GROUND GRAPHICS (Pre-painted directly under the painter list as subdivided tiles)
     // Map bounds: -500 to 500
-    // Draw sea outside
-    // Draw sand shoreline
-    // Draw main city green grass circle
-    const grassCenterProj = proj({ x: 0, y: 0, z: 0 });
-    const oceanColor = '#38BDF8';
     const sandColor = '#FEF08A';
-    const grassColor = '#80E080';
+    const tileSize = 80;
 
-    // Since flat grass is huge, we draw it as a big polygon plane at deep depth
-    const mapVertices = [
-      { x: -480, y: -480, z: -1 },
-      { x: 480, y: -480, z: -1 },
-      { x: 480, y: 480, z: -1 },
-      { x: -480, y: 480, z: -1 },
-    ];
-    const grassPrj = mapVertices.map(proj);
-    ctx.beginPath();
-    ctx.moveTo(grassPrj[0].x, grassPrj[0].y);
-    for (let i = 1; i < grassPrj.length; i++) {
-      ctx.lineTo(grassPrj[i].x, grassPrj[i].y);
+    // Draw sand shoreline as tiled grid to prevent projection flips when player goes far or near edges
+    for (let gx = -480; gx < 480; gx += tileSize) {
+      for (let gy = -480; gy < 480; gy += tileSize) {
+        const pts = [
+          { x: gx, y: gy, z: -1 },
+          { x: gx + tileSize, y: gy, z: -1 },
+          { x: gx + tileSize, y: gy + tileSize, z: -1 },
+          { x: gx, y: gy + tileSize, z: -1 },
+        ];
+
+        let hasBehind = false;
+        pts.forEach(p => {
+          const dx = p.x - cameraRef.current.x;
+          const dy = p.y - cameraRef.current.y;
+          const dz = p.z - cameraRef.current.z;
+          const ry = dy;
+          const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+          if (400 + sz < 15) {
+            hasBehind = true;
+          }
+        });
+
+        if (hasBehind) continue;
+
+        const prjPts = pts.map(proj);
+        ctx.beginPath();
+        ctx.moveTo(prjPts[0].x, prjPts[0].y);
+        ctx.lineTo(prjPts[1].x, prjPts[1].y);
+        ctx.lineTo(prjPts[2].x, prjPts[2].y);
+        ctx.lineTo(prjPts[3].x, prjPts[3].y);
+        ctx.closePath();
+        ctx.fillStyle = sandColor;
+        ctx.fill();
+      }
     }
-    ctx.closePath();
-    ctx.fillStyle = sandColor;
-    ctx.fill();
 
-    const innerCityVertices = [
-      { x: -450, y: -450, z: 0 },
-      { x: 450, y: -450, z: 0 },
-      { x: 450, y: 450, z: 0 },
-      { x: -450, y: 450, z: 0 },
-    ];
-    const innerCityPrj = innerCityVertices.map(proj);
-    ctx.beginPath();
-    ctx.moveTo(innerCityPrj[0].x, innerCityPrj[0].y);
-    for (let i = 1; i < innerCityPrj.length; i++) {
-      ctx.lineTo(innerCityPrj[i].x, innerCityPrj[i].y);
+    // Draw green island grass as tiled grid to prevent projection flips when player goes far or near edges
+    for (let gx = -450; gx < 450; gx += 60) {
+      for (let gy = -450; gy < 450; gy += 60) {
+        const pts = [
+          { x: gx, y: gy, z: 0 },
+          { x: gx + 60, y: gy, z: 0 },
+          { x: gx + 60, y: gy + 60, z: 0 },
+          { x: gx, y: gy + 60, z: 0 },
+        ];
+
+        let hasBehind = false;
+        pts.forEach(p => {
+          const dx = p.x - cameraRef.current.x;
+          const dy = p.y - cameraRef.current.y;
+          const dz = p.z - cameraRef.current.z;
+          const ry = dy;
+          const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+          if (400 + sz < 15) {
+            hasBehind = true;
+          }
+        });
+
+        if (hasBehind) continue;
+
+        const prjPts = pts.map(proj);
+        ctx.beginPath();
+        ctx.moveTo(prjPts[0].x, prjPts[0].y);
+        ctx.lineTo(prjPts[1].x, prjPts[1].y);
+        ctx.lineTo(prjPts[2].x, prjPts[2].y);
+        ctx.lineTo(prjPts[3].x, prjPts[3].y);
+        ctx.closePath();
+        ctx.fillStyle = '#49A06D';
+        ctx.fill();
+      }
     }
-    ctx.closePath();
-    ctx.fillStyle = '#49A06D'; // Lush friendly vibrant green island
-    ctx.fill();
 
-    // DRAW STREETS & ROADS (Tarmac grey)
-    // Horizontal streets and vertical streets grid layout
+    // DRAW STREETS & ROADS (Tarmac grey - subdivided segment-by-segment to prevent projection stretching)
     const streetPlanners = [
       // Central avenues crossing the island
       { x: -440, y: -15, w: 880, h: 30, isVert: false },
@@ -448,45 +481,104 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       { x: -250, y: -250, w: 500, h: 18, isVert: false },
       { x: -250, y: 240, w: 500, h: 18, isVert: false },
       { x: -250, y: -250, w: 18, h: 500, isVert: true },
-      { x: 240, y: -250, w: 18, h: 500, isVert: true },
+      { x: 245, y: -250, w: 18, h: 500, isVert: true },
     ];
 
     streetPlanners.forEach(st => {
-      const v = [
-        { x: st.x, y: st.y, z: 0.1 },
-        { x: st.x + st.w, y: st.y, z: 0.1 },
-        { x: st.x + st.w, y: st.y + st.h, z: 0.1 },
-        { x: st.x, y: st.y + st.h, z: 0.1 },
-      ];
-      const p = v.map(proj);
-      ctx.beginPath();
-      ctx.moveTo(p[0].x, p[0].y);
-      p.forEach(pt => ctx.lineTo(pt.x, pt.y));
-      ctx.closePath();
-      ctx.fillStyle = '#3b4d61'; // Solid dark slate gray tarmac
-      ctx.fill();
-
-      // Yellow dashed lines for the roads
-      const count = st.isVert ? Math.floor(st.h / 35) : Math.floor(st.w / 35);
-      const gap = 35;
-      ctx.strokeStyle = '#FCD34D';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 5]);
-
-      ctx.beginPath();
+      const segmentSize = 40;
       if (st.isVert) {
-        const startPrj = proj({ x: st.x + st.w / 2, y: st.y, z: 0.2 });
-        const endPrj = proj({ x: st.x + st.w / 2, y: st.y + st.h, z: 0.2 });
-        ctx.moveTo(startPrj.x, startPrj.y);
-        ctx.lineTo(endPrj.x, endPrj.y);
+        for (let gy = st.y; gy < st.y + st.h; gy += segmentSize) {
+          const chunkH = Math.min(segmentSize, st.y + st.h - gy);
+          const v = [
+            { x: st.x, y: gy, z: 0.1 },
+            { x: st.x + st.w, y: gy, z: 0.1 },
+            { x: st.x + st.w, y: gy + chunkH, z: 0.1 },
+            { x: st.x, y: gy + chunkH, z: 0.1 },
+          ];
+
+          let hasBehind = false;
+          v.forEach(p => {
+            const dx = p.x - cameraRef.current.x;
+            const dy = p.y - cameraRef.current.y;
+            const dz = p.z - cameraRef.current.z;
+            const ry = dy;
+            const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+            if (400 + sz < 15) {
+              hasBehind = true;
+            }
+          });
+
+          if (hasBehind) continue;
+
+          const p = v.map(proj);
+          ctx.beginPath();
+          ctx.moveTo(p[0].x, p[0].y);
+          ctx.lineTo(p[1].x, p[1].y);
+          ctx.lineTo(p[2].x, p[2].y);
+          ctx.lineTo(p[3].x, p[3].y);
+          ctx.closePath();
+          ctx.fillStyle = '#3b4d61';
+          ctx.fill();
+
+          // Draw yellow dashed lines on this active slice
+          ctx.strokeStyle = '#FCD34D';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          const startPrj = proj({ x: st.x + st.w / 2, y: gy, z: 0.2 });
+          const endPrj = proj({ x: st.x + st.w / 2, y: gy + chunkH, z: 0.2 });
+          ctx.moveTo(startPrj.x, startPrj.y);
+          ctx.lineTo(endPrj.x, endPrj.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       } else {
-        const startPrj = proj({ x: st.x, y: st.y + st.h / 2, z: 0.2 });
-        const endPrj = proj({ x: st.x + st.w, y: st.y + st.h / 2, z: 0.2 });
-        ctx.moveTo(startPrj.x, startPrj.y);
-        ctx.lineTo(endPrj.x, endPrj.y);
+        for (let gx = st.x; gx < st.x + st.w; gx += segmentSize) {
+          const chunkW = Math.min(segmentSize, st.x + st.w - gx);
+          const v = [
+            { x: gx, y: st.y, z: 0.1 },
+            { x: gx + chunkW, y: st.y, z: 0.1 },
+            { x: gx + chunkW, y: st.y + st.h, z: 0.1 },
+            { x: gx, y: st.y + st.h, z: 0.1 },
+          ];
+
+          let hasBehind = false;
+          v.forEach(p => {
+            const dx = p.x - cameraRef.current.x;
+            const dy = p.y - cameraRef.current.y;
+            const dz = p.z - cameraRef.current.z;
+            const ry = dy;
+            const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+            if (400 + sz < 15) {
+              hasBehind = true;
+            }
+          });
+
+          if (hasBehind) continue;
+
+          const p = v.map(proj);
+          ctx.beginPath();
+          ctx.moveTo(p[0].x, p[0].y);
+          ctx.lineTo(p[1].x, p[1].y);
+          ctx.lineTo(p[2].x, p[2].y);
+          ctx.lineTo(p[3].x, p[3].y);
+          ctx.closePath();
+          ctx.fillStyle = '#3b4d61';
+          ctx.fill();
+
+          // Draw yellow dashed lines on this active slice
+          ctx.strokeStyle = '#FCD34D';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          const startPrj = proj({ x: gx, y: st.y + st.h / 2, z: 0.2 });
+          const endPrj = proj({ x: gx + chunkW, y: st.y + st.h / 2, z: 0.2 });
+          ctx.moveTo(startPrj.x, startPrj.y);
+          ctx.lineTo(endPrj.x, endPrj.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       }
-      ctx.stroke();
-      ctx.setLineDash([]); // Reset
     });
 
     // MUD PUDDLES DRAWING
@@ -831,6 +923,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // DRAW FACES
     faces.forEach((face) => {
       if (face.points.length < 2) return;
+
+      // Class 3D Near Plane Clip: Skip drawing the face entirely if any vertex lies behind or too close to the camera
+      let hasBehind = false;
+      for (const p of face.points) {
+        const dx = p.x - cameraRef.current.x;
+        const dy = p.y - cameraRef.current.y;
+        const dz = p.z - cameraRef.current.z;
+        const ry = dy; // yaw is 0
+        const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+        if (400 + sz < 10) {
+          hasBehind = true;
+          break;
+        }
+      }
+      if (hasBehind) return;
 
       const projected = face.points.map(proj);
 

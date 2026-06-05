@@ -272,6 +272,16 @@ export default function App() {
   const [rentWarning, setRentWarning] = useState(false);
   const [rentPaymentNotice, setRentPaymentNotice] = useState<{ amount: number; nextDay: number } | null>(null);
 
+  // Auto-hide rent payment notice after 3 seconds
+  useEffect(() => {
+    if (rentPaymentNotice) {
+      const timer = setTimeout(() => {
+        setRentPaymentNotice(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [rentPaymentNotice]);
+
   // Pizzeria Order states
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -1149,33 +1159,15 @@ export default function App() {
           </div>
         )}
 
-        {/* SUCCESS RENT PAID POPUP - VERY VISIBLE SUMMARY */}
+        {/* SUCCESS RENT PAID FLOATING NOTICE */}
         {rentPaymentNotice && (
-          <div className="absolute inset-0 bg-emerald-950/65 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white border-4 border-emerald-500 p-6 rounded-[32px] text-center space-y-4 max-w-sm animate-scale-up shadow-2xl text-slate-800">
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-300 shadow-sm animate-bounce">
-                <CheckCircle2 className="w-10 h-10 shrink-0 text-emerald-500" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-xl font-black font-serif text-emerald-600 uppercase leading-none tracking-tight">¡PAGO DE RENTA EXITOSO!</h3>
-                <p className="text-[10px] font-extrabold text-emerald-700 tracking-widest uppercase">CONTRATO RENOVADO DE LA ISLA</p>
-              </div>
-              <div className="bg-emerald-50 border-2 border-emerald-200 p-3 rounded-2xl">
-                <p className="text-[10px] text-emerald-800 uppercase tracking-wider font-extrabold">Monto del Alquiler de hoy Cobrado:</p>
-                <p className="text-3xl font-mono font-black text-emerald-600">-${rentPaymentNotice.amount}</p>
-              </div>
-              <p className="text-xs text-gray-500 font-bold leading-relaxed">
-                ¡Has asegurado tu estadía en la isla! El arrendatario ha debitado el pago. Mantente entregando pizzas para el próximo ciclo.
+          <div className="absolute top-22 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-600 to-teal-600 border-2 border-emerald-300 p-2.5 px-4 rounded-2xl flex items-center gap-3 shadow-2xl text-white z-50 animate-bounce max-w-[90%] md:max-w-md">
+            <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-100 animate-pulse" />
+            <div className="text-left leading-tight">
+              <p className="text-[9px] uppercase font-black tracking-widest text-emerald-100 leading-none">Renta Pagada de la Isla</p>
+              <p className="text-xs font-bold mt-0.5">
+                Se debitaron <span className="font-mono text-yellow-300 font-extrabold">-${rentPaymentNotice.amount}</span>. Siguiente pago: <span className="font-mono text-emerald-100 font-extrabold">Día {rentPaymentNotice.nextDay}</span>
               </p>
-              <div className="text-xs bg-slate-100 p-2.5 rounded-xl border border-slate-200 text-slate-700 font-extrabold">
-                Siguiente cobro: <span className="text-emerald-600 font-mono font-black">Día {rentPaymentNotice.nextDay}</span>
-              </div>
-              <button 
-                onClick={() => setRentPaymentNotice(null)}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-3 rounded-xl transition cursor-pointer text-xs uppercase shadow-[0_3px_0_rgb(5,150,105)] active:translate-y-0.5 active:shadow-[0_1px_0_rgb(5,150,105)]"
-              >
-                Cerrar y Trabajar 🍕
-              </button>
             </div>
           </div>
         )}
