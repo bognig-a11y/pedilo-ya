@@ -232,13 +232,13 @@ export const ConcesionarioModal: React.FC<ConcesionarioModalProps> = ({
                           audio.playUpgrade();
                           onBuyVehicle(vehicle.id, vehicle.price);
                         }}
-                        className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-205 flex items-center gap-1 ${
+                        className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all duration-150 flex items-center gap-1.5 ${
                           canAfford 
-                            ? 'bg-blue-550 hover:bg-blue-600 text-white shadow-[0_3px_0_rgb(29,78,216)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(29,78,216)] cursor-pointer' 
-                            : 'bg-gray-200 text-gray-450 border border-gray-300 cursor-not-allowed'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-[0_3px_0_rgb(29,78,216)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(29,78,216)] border border-blue-700 cursor-pointer' 
+                            : 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed'
                         }`}
                       >
-                        Comprar Mejora
+                        Comprar Vehículo
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     ) : (

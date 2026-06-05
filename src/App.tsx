@@ -270,6 +270,7 @@ export default function App() {
   const [day, setDay] = useState(1);
   const [dayTimeLeft, setDayTimeLeft] = useState(60); // 1 minute is 60 seconds
   const [rentWarning, setRentWarning] = useState(false);
+  const [rentPaymentNotice, setRentPaymentNotice] = useState<{ amount: number; nextDay: number } | null>(null);
 
   // Pizzeria Order states
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
@@ -779,6 +780,7 @@ export default function App() {
                 } else {
                   // Deduct rent safely
                   audio.playRentPay();
+                  setRentPaymentNotice({ amount: rentDue, nextDay: currentDay + 5 });
                   alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 5 días.`);
                   return cash - rentDue;
                 }
@@ -1019,6 +1021,11 @@ export default function App() {
     generatePizzeriaOrders(VEHICLES_LIST[0].speed);
   };
 
+  // Rent details
+  const nextRentDay = Math.ceil(day / 5) * 5;
+  const nextRentAmount = Math.floor(nextRentDay / 5) * 500;
+  const daysUntilNextRent = nextRentDay - day;
+
   return (
     <div id="pedilo-ya-root-app" className="w-screen h-screen bg-sky-200 flex flex-col justify-between overflow-hidden relative select-none selection:bg-amber-100 font-sans">
       
@@ -1057,11 +1064,17 @@ export default function App() {
             </div>
 
             {/* Days Box */}
-            <div className="bg-orange-50 border-2 border-orange-450 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold">
-              <Calendar className="w-5 h-5 text-orange-500 font-bold" />
+            <div className="bg-orange-50 border-2 border-orange-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold" title={`Próximo pago de renta: $${nextRentAmount}`}>
+              <Calendar className="w-5 h-5 text-orange-550 font-bold" />
               <div>
                 <p className="text-[9px] uppercase text-orange-600 font-extrabold tracking-wider leading-none">Día {day}</p>
-                <p className="font-mono text-xs font-black leading-none mt-0.5 text-orange-500">Renta en {60 - dayTimeLeft}s...</p>
+                <p className="font-mono text-xs font-black leading-none mt-0.5 text-orange-500">
+                  {daysUntilNextRent === 0 ? (
+                    <span className="text-red-600 animate-pulse">¡HOY Renta: ${nextRentAmount} (en {60 - dayTimeLeft}s)!</span>
+                  ) : (
+                    <span>Renta: ${nextRentAmount} en {daysUntilNextRent}d ({60 - dayTimeLeft}s)</span>
+                  )}
+                </p>
               </div>
             </div>
 
@@ -1105,10 +1118,10 @@ export default function App() {
 
       {/* MOBILE DISPLAY STATS */}
       {gameState === 'playing' && (
-        <section className="bg-white border-b-2 border-yellow-400 p-2 text-xs flex justify-around items-center md:hidden font-sans font-bold text-gray-700">
+        <section className="bg-white border-b-2 border-yellow-400 p-2 text-[10px] flex justify-around items-center md:hidden font-sans font-bold text-gray-700">
           <span>💵 <strong className="text-emerald-600 font-black">${money}</strong></span>
           <span>{currentVehicle.emoji} {currentVehicle.name}</span>
-          <span>📅 Día {day}</span>
+          <span>📅 Día {day} ({daysUntilNextRent === 0 ? `HOY Renta: $${nextRentAmount}` : `Renta: $${nextRentAmount} en ${daysUntilNextRent}d`})</span>
           <span className="text-pink-650">⚠️ Fallos: {failures}/3</span>
         </section>
       )}
@@ -1132,6 +1145,37 @@ export default function App() {
               <AlertTriangle className="w-12 h-12 text-yellow-300 mx-auto animate-pulse" />
               <h3 className="text-2xl font-black font-serif uppercase">¡MAÑANA PAGAS RENTA!</h3>
               <p className="text-xs font-semibold">Necesitas pagar al menos <strong>${Math.floor(day / 5 + 1) * 500}</strong> en {dayTimeLeft}s.</p>
+            </div>
+          </div>
+        )}
+
+        {/* SUCCESS RENT PAID POPUP - VERY VISIBLE SUMMARY */}
+        {rentPaymentNotice && (
+          <div className="absolute inset-0 bg-emerald-950/65 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white border-4 border-emerald-500 p-6 rounded-[32px] text-center space-y-4 max-w-sm animate-scale-up shadow-2xl text-slate-800">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-300 shadow-sm animate-bounce">
+                <CheckCircle2 className="w-10 h-10 shrink-0 text-emerald-500" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black font-serif text-emerald-600 uppercase leading-none tracking-tight">¡PAGO DE RENTA EXITOSO!</h3>
+                <p className="text-[10px] font-extrabold text-emerald-700 tracking-widest uppercase">CONTRATO RENOVADO DE LA ISLA</p>
+              </div>
+              <div className="bg-emerald-50 border-2 border-emerald-200 p-3 rounded-2xl">
+                <p className="text-[10px] text-emerald-800 uppercase tracking-wider font-extrabold">Monto del Alquiler de hoy Cobrado:</p>
+                <p className="text-3xl font-mono font-black text-emerald-600">-${rentPaymentNotice.amount}</p>
+              </div>
+              <p className="text-xs text-gray-500 font-bold leading-relaxed">
+                ¡Has asegurado tu estadía en la isla! El arrendatario ha debitado el pago. Mantente entregando pizzas para el próximo ciclo.
+              </p>
+              <div className="text-xs bg-slate-100 p-2.5 rounded-xl border border-slate-200 text-slate-700 font-extrabold">
+                Siguiente cobro: <span className="text-emerald-600 font-mono font-black">Día {rentPaymentNotice.nextDay}</span>
+              </div>
+              <button 
+                onClick={() => setRentPaymentNotice(null)}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-3 rounded-xl transition cursor-pointer text-xs uppercase shadow-[0_3px_0_rgb(5,150,105)] active:translate-y-0.5 active:shadow-[0_1px_0_rgb(5,150,105)]"
+              >
+                Cerrar y Trabajar 🍕
+              </button>
             </div>
           </div>
         )}
