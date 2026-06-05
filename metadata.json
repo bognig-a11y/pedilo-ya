@@ -1,0 +1,6 @@
+{
+  "name": "Pedilo Ya",
+  "description": "Un divertido videojuego 3D interactivo donde trabajas de repartidor en una isla-ciudad, realizas entregas de comida, mejoras tus vehiculos, juegas en un colorido casino y luchas por pagar tu renta para escapar de la isla.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
