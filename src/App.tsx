@@ -1154,7 +1154,7 @@ export default function App() {
             <div className="bg-rose-500 text-white border-4 border-yellow-400 p-6 rounded-[32px] text-center space-y-2 max-w-xs animate-bounce shadow-2xl">
               <AlertTriangle className="w-12 h-12 text-yellow-300 mx-auto animate-pulse" />
               <h3 className="text-2xl font-black font-serif uppercase">¡MAÑANA PAGAS RENTA!</h3>
-              <p className="text-xs font-semibold">Necesitas pagar al menos <strong>${Math.floor(day / 5 + 1) * 500}</strong> en {dayTimeLeft}s.</p>
+              <p className="text-xs font-semibold">Necesitas pagar al menos <strong>${nextRentAmount}</strong> en {dayTimeLeft}s.</p>
             </div>
           </div>
         )}
@@ -1191,6 +1191,7 @@ export default function App() {
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Compra vehículos y helicópteros en la Tienda.</p>
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Invierte en el Casino de la isla para duplicar tu botín.</p>
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> ¡Paga tu renta cada 5 días o quédate fuera!</p>
+              <p className="font-black flex items-center gap-1.5 bg-yellow-100/80 p-2 rounded-xl border border-yellow-300 text-amber-950"><CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" /> <span>🎯 <strong>OBJETIVO REAL:</strong> ¡Compra el <strong>Helicóptero privado</strong> y reúne <strong>$10,000</strong> en mano para cargar combustible y escapar victorioso!</span></p>
             </div>
 
             <button
