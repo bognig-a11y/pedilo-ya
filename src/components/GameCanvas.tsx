@@ -182,7 +182,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Standard high-fidelity 3D perspective scaling factor
     const zoom = 1.95;
     const distanceFactor = 400;
-    const fov = distanceFactor / (distanceFactor + sz);
+    // Clamp the denominator to a positive, safe minimum to avoid division by zero or negative flip projection glitches
+    const denom = Math.max(10, distanceFactor + sz);
+    const fov = distanceFactor / denom;
 
     return {
       x: width / 2 + sx * fov * zoom,
@@ -518,44 +520,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
 
     // 4 CORNER DOCKS / HELIPADS (Rescue escapes)
-    CORNERS.forEach((c, idx) => {
-      // Draw a circular checkered pad on floor
-      const numPts = 10;
-      const padPts: Point3D[] = [];
-      for (let i = 0; i < numPts; i++) {
-        const a = (i / numPts) * Math.PI * 2;
-        padPts.push({
-          x: c.x + Math.cos(a) * 35,
-          y: c.y + Math.sin(a) * 35,
-          z: 0.3,
-        });
-      }
-      const depthsPrj = padPts.map(proj);
-      const avgD = depthsPrj.reduce((sum, p) => sum + p.depth, 0) / padPts.length;
+    if (currentVehicleId === 'helicoptero') {
+      CORNERS.forEach((c, idx) => {
+        // Draw a circular checkered pad on floor
+        const numPts = 10;
+        const padPts: Point3D[] = [];
+        for (let i = 0; i < numPts; i++) {
+          const a = (i / numPts) * Math.PI * 2;
+          padPts.push({
+            x: c.x + Math.cos(a) * 35,
+            y: c.y + Math.sin(a) * 35,
+            z: 0.3,
+          });
+        }
+        const depthsPrj = padPts.map(proj);
+        const avgD = depthsPrj.reduce((sum, p) => sum + p.depth, 0) / padPts.length;
 
-      faces.push({
-        points: padPts,
-        color: idx % 2 === 0 ? '#FB7185' : '#60A5FA', // Neon pink and neon blue
-        avgDepth: avgD,
-        text: 'ESCAPE',
+        faces.push({
+          points: padPts,
+          color: idx % 2 === 0 ? '#FB7185' : '#60A5FA', // Neon pink and neon blue
+          avgDepth: avgD,
+          text: 'ESCAPE',
+        });
+
+        // Draw floating rescue beam indicators!
+        const topPts: Point3D[] = [];
+        for (let i = 0; i < numPts; i++) {
+          const a = (i / numPts) * Math.PI * 2;
+          topPts.push({
+            x: c.x + Math.cos(a) * 15,
+            y: c.y + Math.sin(a) * 15,
+            z: 110,
+          });
+        }
+        const depthsPrjTop = topPts.map(proj);
+        const avgDTop = depthsPrjTop.reduce((sum, p) => sum + p.depth, 0) / topPts.length;
+
+        // Draw a transparent visual escape cylinder side
+        // In Painter's algorithm we represent this with floating vertices simple columns
       });
-
-      // Draw floating rescue beam indicators!
-      const topPts: Point3D[] = [];
-      for (let i = 0; i < numPts; i++) {
-        const a = (i / numPts) * Math.PI * 2;
-        topPts.push({
-          x: c.x + Math.cos(a) * 15,
-          y: c.y + Math.sin(a) * 15,
-          z: 110,
-        });
-      }
-      const depthsPrjTop = topPts.map(proj);
-      const avgDTop = depthsPrjTop.reduce((sum, p) => sum + p.depth, 0) / topPts.length;
-
-      // Draw a transparent visual escape cylinder side
-      // In Painter's algorithm we represent this with floating vertices simple columns
-    });
+    }
 
     // PIZZERIA (Exactly in the center)
     // Red, White, Green stylized building with pizza banner
