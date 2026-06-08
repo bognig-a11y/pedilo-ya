@@ -30,7 +30,7 @@ export const PizzeriaModal: React.FC<PizzeriaModalProps> = ({
   if (!isOpen) return null;
 
   const isTruck = currentVehicleId === 'camion';
-  const maxActive = isTruck ? 2 : 1;
+  const maxActive = 1;
   const canAcceptMore = activeOrders.length < maxActive;
 
   return (
@@ -63,11 +63,11 @@ export const PizzeriaModal: React.FC<PizzeriaModalProps> = ({
         <div className="bg-orange-50 border-b-2 border-orange-100 px-6 py-4 flex items-center justify-between text-xs text-orange-950 font-bold">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
-            <span>Capacidad de reparto activa: <strong className="text-orange-900">{activeOrders.length} / {maxActive} ({isTruck ? 'Camión: Doble Pedido' : 'Individual'})</strong></span>
+            <span>Capacidad de reparto activa: <strong className="text-orange-900">{activeOrders.length} / {maxActive} ({isTruck ? 'Súper Camión: Multiplicador x2' : 'Individual'})</strong></span>
           </div>
           {isTruck && (
-            <span className="text-orange-750 bg-orange-200/50 p-1 px-2.5 rounded-lg text-[10px] font-black border border-orange-300">
-              🚚 ¡El 2do temporizador se pausará hasta entregar el 1ero!
+            <span className="text-emerald-750 bg-emerald-100 p-1 px-2.5 rounded-lg text-[10px] font-black border border-emerald-300 animate-pulse">
+              🚚 ¡El Camión Duplicador duplica todo el dinero obtenido de tus entregas!
             </span>
           )}
         </div>

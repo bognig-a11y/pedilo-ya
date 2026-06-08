@@ -282,6 +282,18 @@ export default function App() {
     }
   }, [rentPaymentNotice]);
 
+  // Start/Stop Game Background Music loop based on gameplay state
+  useEffect(() => {
+    if (gameState === 'playing') {
+      audio.startBGM();
+    } else {
+      audio.stopBGM();
+    }
+    return () => {
+      audio.stopBGM();
+    };
+  }, [gameState]);
+
   // Pizzeria Order states
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
@@ -732,12 +744,20 @@ export default function App() {
             
             // Calculate final reward with Ganancia Level percentage bonus payout (12% per level)
             const bonusPercent = state.upgrades.ganancia * 0.12;
-            const finalPayout = Math.round(primaryDelivery.reward * (1 + bonusPercent));
+            let finalPayout = Math.round(primaryDelivery.reward * (1 + bonusPercent));
+            const isTruck = state.currentVehicleId === 'camion';
+            if (isTruck) {
+              finalPayout *= 2;
+            }
             
             setMoney(prev => prev + finalPayout);
             setCompletedOrdersCount(prev => prev + 1);
 
-            alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (Bono: +${state.upgrades.ganancia * 12}%)`);
+            if (isTruck) {
+              alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (¡DUPLICADO x2 por Camión! 🚚)`);
+            } else {
+              alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (Bono: +${state.upgrades.ganancia * 12}%)`);
+            }
 
             // Shift Pizza Queue list
             setActiveOrders(prev => {
@@ -767,59 +787,50 @@ export default function App() {
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    const interval = setInterval(() => {
+    const timer = setTimeout(() => {
       // 1. Day Clock tick
-      setDayTimeLeft(prev => {
-        if (prev <= 1) {
-          // Increment Day!
-          setDay(currentDay => {
-            const nextDay = currentDay + 1;
-            
-            // Assess lease payment every 5 days threshold: Day 5, 10, 15, 20...
-            const lastDayOfCycle = currentDay % 5 === 0;
-            if (lastDayOfCycle) {
-              const cycleNumber = Math.floor(currentDay / 5);
-              const rentDue = cycleNumber * 500;
+      if (dayTimeLeft <= 1) {
+        // Increment Day (Day transitions from `day` to `day + 1`)
+        const rentDue = day % 5 === 0 ? Math.floor(day / 5) * 500 : 0;
 
-              setMoney(cash => {
-                if (cash < rentDue) {
-                  // Game Over! Insolvency lease debt!
-                  audio.playFail();
-                  setGameState('gameover');
-                  return cash;
-                } else {
-                  // Deduct rent safely
-                  audio.playRentPay();
-                  setRentPaymentNotice({ amount: rentDue, nextDay: currentDay + 5 });
-                  alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 5 días.`);
-                  return cash - rentDue;
-                }
-              });
-            }
-
-            // Rent warning: when entering Day 4, 9, 14, 19 (which leaves exactly 1 day for next payment on 5, 10, 15, 20!)
-            if (nextDay % 5 === 4) {
-              setRentWarning(true);
-              audio.playAlert();
-              // Auto hide banner warning after 2 seconds
-              setTimeout(() => {
-                setRentWarning(false);
-              }, 2000);
-            }
-
-            return nextDay;
-          });
-
-          return 60; // reset 1-minute real tick
+        if (rentDue > 0) {
+          if (money < rentDue) {
+            // Game Over! Insolvency lease debt!
+            audio.playFail();
+            setGameState('gameover');
+            return;
+          } else {
+            // Deduct rent safely
+            setMoney(cash => cash - rentDue);
+            audio.playRentPay();
+            setRentPaymentNotice({ amount: rentDue, nextDay: day + 5 });
+            alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 5 días.`);
+          }
         }
-        return prev - 1;
-      });
+
+        // Apply new day state updates cleanly
+        setDay(d => d + 1);
+        setDayTimeLeft(60);
+
+        // Rent warning calculation: Day 4, 9, 14, 19...
+        const nextDay = day + 1;
+        if (nextDay % 5 === 4) {
+          setRentWarning(true);
+          audio.playAlert();
+          setTimeout(() => {
+            setRentWarning(false);
+          }, 2000);
+        }
+      } else {
+        setDayTimeLeft(prev => prev - 1);
+      }
 
       // 2. Active Deliveries clocks tick
       if (activeOrders.length > 0) {
         setActiveOrders(prev => {
+          if (prev.length === 0) return prev;
+
           // Decrement elapsed timeLeft ONLY of the FIRST delivery!
-          // Second order timer remains paused until the first is delivered, matching Truck rule criteria.
           const queue = prev.map((ord, idx) => {
             if (idx === 0) {
               return { ...ord, timeLeft: ord.timeLeft - 1 };
@@ -844,7 +855,7 @@ export default function App() {
             alertBanner(`⏰ ¡SE ACABO EL TIEMPO! Fallaste la entrega en Casa ${targetHouse?.number || ''}`);
 
             queue.shift(); // remove failed pizza
-            
+
             // If no orders left, clear out obstacles
             if (queue.length === 0) {
               setObstacles([]);
@@ -857,8 +868,8 @@ export default function App() {
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [gameState, activeOrders, houses]);
+    return () => clearTimeout(timer);
+  }, [gameState, day, dayTimeLeft, activeOrders, money, houses]);
 
 
   // Helper alert notifications message
@@ -895,8 +906,7 @@ export default function App() {
   // PIZZERIA ORDER ACCEPTED HANDLER
   const handleAcceptOrder = (order: Order) => {
     // Add to player active pizza queue
-    const isTruck = currentVehicleId === 'camion';
-    const limitMax = isTruck ? 2 : 1;
+    const limitMax = 1;
 
     if (activeOrders.length >= limitMax) {
       alert('¡Capacidad de transporte llena!');

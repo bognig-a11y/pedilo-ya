@@ -64,11 +64,11 @@ export const VEHICLES_LIST: Vehicle[] = [
   },
   {
     id: 'camion',
-    name: 'Camión Repartidor Multi',
+    name: 'Camión Duplicador',
     speed: 210, // Same speed as auto
     price: 9000,
     emoji: '🚚',
-    description: '🚚 ¡Súper Camión! Capacidad máxima: te permite aceptar hasta 2 pedidos al mismo tiempo.',
+    description: '🚚 ¡Camión Duplicador! Su potente caja comercial duplica todo el dinero cobrado por cada entrega.',
     color: '#A78BFA',
   },
   {

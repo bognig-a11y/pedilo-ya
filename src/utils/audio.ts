@@ -6,6 +6,9 @@
 class AudioManager {
   private ctx: AudioContext | null = null;
   private muted: boolean = false;
+  private bgmInterval: any = null;
+  private bgmStep: number = 0;
+  private bgmPlaying: boolean = false;
 
   private init() {
     if (!this.ctx) {
@@ -142,6 +145,59 @@ class AudioManager {
     if (Math.random() < 0.15 && speedRatio > 0.1) {
       const freq = 60 + speedRatio * 110;
       this.playTone(freq, 'triangle', 0.04, 0.015);
+    }
+  }
+
+  startBGM() {
+    this.init();
+    if (this.bgmPlaying) return;
+    this.bgmPlaying = true;
+    this.bgmStep = 0;
+
+    const melody = [
+      659.25, 0, 783.99, 880.00, 0, 783.99, 659.25, 523.25,
+      587.33, 0, 587.33, 659.25, 0, 587.33, 523.25, 440.00,
+      523.25, 0, 659.25, 698.46, 0, 698.46, 783.99, 880.00,
+      783.99, 0, 659.25, 587.33, 0, 493.88, 523.25, 0
+    ];
+
+    const bass = [
+      130.81, 196.00, 130.81, 196.00, 130.81, 196.00, 130.81, 196.00,
+      98.00, 146.83, 98.00, 146.83, 98.00, 146.83, 98.00, 146.83,
+      87.31, 130.81, 87.31, 130.81, 87.31, 130.81, 87.31, 130.81,
+      98.00, 146.83, 98.00, 146.83, 130.81, 196.00, 130.81, 0
+    ];
+
+    const stepTime = 160; // Upbeat and quick 160ms steps
+
+    this.bgmInterval = setInterval(() => {
+      if (this.muted || !this.ctx || this.ctx.state === 'suspended') {
+        this.bgmStep = (this.bgmStep + 1) % melody.length;
+        return;
+      }
+
+      const note = melody[this.bgmStep];
+      const bassNote = bass[this.bgmStep];
+
+      // Play soft melody note (sine style chiptune)
+      if (note > 0) {
+        this.playTone(note, 'sine', stepTime / 1000 * 0.8, 0.015);
+      }
+
+      // Play alternating soft retro bassline (warm triangle)
+      if (bassNote > 0 && this.bgmStep % 2 === 0) {
+        this.playTone(bassNote, 'triangle', stepTime / 1000 * 1.4, 0.012);
+      }
+
+      this.bgmStep = (this.bgmStep + 1) % melody.length;
+    }, stepTime);
+  }
+
+  stopBGM() {
+    this.bgmPlaying = false;
+    if (this.bgmInterval) {
+      clearInterval(this.bgmInterval);
+      this.bgmInterval = null;
     }
   }
 }
