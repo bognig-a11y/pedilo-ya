@@ -394,6 +394,9 @@ export default function App() {
     hasGlobalized,
     isRivalDefeated,
     isCustomizationOpen,
+    renovationLevel,
+    pizzeriaName,
+    pizzeriaColor,
   };
 
   // Initialize and regenerate 3 orders
@@ -531,15 +534,15 @@ export default function App() {
             setIsCasinoOpen(false);
             setIsUpgradesOpen(false);
             audio.playUpgrade();
-          } else if (distPizza < 50 && !state.isBuyRivalOpen && !hasGlobalized) {
-            if (playerMarketShare >= 99.8) {
+          } else if (distPizza < 50 && !state.isBuyRivalOpen && !state.hasGlobalized) {
+            if (state.playerMarketShare >= 99.8) {
               setIsBuyRivalOpen(true);
               setIsDealerOpen(false);
               setIsCasinoOpen(false);
               setIsUpgradesOpen(false);
               audio.playUpgrade();
             } else {
-              alertBanner(`⚠️ No puedes adquirir la pizzería rival todavía. Logra el 100% de la participación del mercado primero (Rival tiene ${(100 - playerMarketShare).toFixed(1)}%).`);
+              alertBanner(`⚠️ No puedes adquirir la pizzería rival todavía. Logra el 100% de la participación del mercado primero (Rival tiene ${(100 - state.playerMarketShare).toFixed(1)}%).`);
             }
           }
         }
@@ -894,16 +897,11 @@ export default function App() {
             }
 
             // Support market share growth
-            if (hasOwnPizzeria && !isRivalDefeated) {
-              let gain = 0.2;
-              if (renovationLevel >= 2) {
-                gain = 1.0;
-              }
+            if (state.hasOwnPizzeria && !state.isRivalDefeated) {
+              const gain = state.renovationLevel >= 2 ? 1.0 : 0.2;
               setPlayerMarketShare(prev => {
                 let nextShare = prev + gain;
-                if (renovationLevel >= 2) {
-                  nextShare = Math.round(nextShare);
-                }
+                nextShare = Math.round(nextShare * 10) / 10;
                 const finalShare = Math.min(100, nextShare);
                 if (finalShare >= 99.8) {
                   setIsRivalDefeated(true);
@@ -913,7 +911,7 @@ export default function App() {
                 } else {
                   // Alert the user about their market share gain too
                   setTimeout(() => {
-                    alertBanner(`📈 Cuota de mercado alcanzada: ${finalShare.toFixed(renovationLevel >= 2 ? 0 : 1)}% (+${gain}%)`);
+                    alertBanner(`📈 Cuota de mercado alcanzada: ${finalShare.toFixed(state.renovationLevel >= 2 ? 0 : 1)}% (+${gain}%)`);
                   }, 2000);
                 }
                 return finalShare;
@@ -1649,22 +1647,24 @@ export default function App() {
         {hasOwnPizzeria && (
           <div className={`mb-3 w-full bg-slate-900/95 border-2 border-amber-500/80 p-3 rounded-2xl flex flex-col gap-1.5 shadow-xl select-none z-10 transition-all duration-300 relative ${rivalPulse ? 'scale-[1.01] border-red-500' : ''}`}>
             <div className="flex justify-between items-center text-xs">
-              <div className="flex items-center gap-1.5 font-sans font-black uppercase text-emerald-400">
-                <span>🟢 TU MARCA: <strong>{playerMarketShare.toFixed(playerMarketShare % 1 === 0 ? 0 : 1)}%</strong></span>
+              <div className="flex items-center gap-1.5 font-sans font-black uppercase" style={{ color: pizzeriaColor }}>
+                <span className="w-3 h-3 rounded-full shrink-0 shadow-sm border border-black/20" style={{ backgroundColor: pizzeriaColor }} />
+                <span>{pizzeriaName.toUpperCase()}: <strong>{playerMarketShare.toFixed(playerMarketShare % 1 === 0 ? 0 : 1)}%</strong></span>
               </div>
               <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800">
                 {isRivalDefeated ? '👑 ¡MERCADO CONQUISTADO! (RIVAL ELIMINADO)' : `COMPETENCIA (PASIVA RIVAL: +${rivalPassiveRate}%/MIN)`}
               </span>
-              <div className="flex items-center gap-1.5 font-sans font-black uppercase text-red-500">
-                <span>🔴 RIVAL: <strong>{(100 - playerMarketShare).toFixed((100 - playerMarketShare) % 1 === 0 ? 0 : 1)}%</strong></span>
+              <div className="flex items-center gap-1.5 font-sans font-black uppercase text-red-550">
+                <span className="w-3 h-3 bg-red-600 rounded-full shrink-0 shadow-sm border border-black/20" />
+                <span>RIVAL: <strong>{(100 - playerMarketShare).toFixed((100 - playerMarketShare) % 1 === 0 ? 0 : 1)}%</strong></span>
               </div>
             </div>
             
             {/* 100% split visual progress bar */}
-            <div className="w-full h-3.5 bg-red-700 rounded-full overflow-hidden flex shadow-inner border border-slate-950">
+            <div className="w-full h-3.5 bg-slate-950 rounded-full overflow-hidden flex shadow-inner border border-slate-800">
               <div 
-                className="bg-gradient-to-r from-emerald-500 to-amber-500 h-full transition-all duration-350 ease-out shrink-0"
-                style={{ width: `${playerMarketShare}%` }}
+                className="h-full transition-all duration-350 ease-out shrink-0"
+                style={{ width: `${playerMarketShare}%`, backgroundColor: pizzeriaColor }}
               />
               <div 
                 className="bg-red-600 h-full transition-all duration-350 ease-out shrink-0"
@@ -1799,6 +1799,9 @@ export default function App() {
                 renovationLevel={renovationLevel}
                 employees={employees}
                 rivalDeliverers={rivalDeliverers}
+                pizzeriaName={pizzeriaName}
+                pizzeriaColor={pizzeriaColor}
+                hasGlobalized={hasGlobalized}
                 onPlayerMove={(x, y, a) => {
                   setPlayerX(x);
                   setPlayerY(y);

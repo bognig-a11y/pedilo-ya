@@ -7,6 +7,20 @@ import React, { useRef, useEffect, useState } from 'react';
 import { House, Obstacle, Vagabond, VehicleId, Order } from '../types';
 import { audio } from '../utils/audio';
 
+function adjustHexColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent * 100);
+  let r = (num >> 16) + amt;
+  let g = ((num >> 8) & 0x00ff) + amt;
+  let b = (num & 0x0000ff) + amt;
+
+  r = Math.min(255, Math.max(0, r));
+  g = Math.min(255, Math.max(0, g));
+  b = Math.min(255, Math.max(0, b));
+
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
 interface GameCanvasProps {
   playerX: number;
   playerY: number;
@@ -30,6 +44,9 @@ interface GameCanvasProps {
   renovationLevel: number;
   employees: any[];
   rivalDeliverers?: any[];
+  pizzeriaName: string;
+  pizzeriaColor: string;
+  hasGlobalized: boolean;
 }
 
 // 3D Projection & Painter utility types
@@ -71,6 +88,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   renovationLevel,
   employees,
   rivalDeliverers,
+  pizzeriaName,
+  pizzeriaColor,
+  hasGlobalized,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -115,6 +135,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     renovationLevel,
     employees: employees || [],
     rivalDeliverers: rivalDeliverers || [],
+    pizzeriaName,
+    pizzeriaColor,
+    hasGlobalized,
   });
 
   renderStateRef.current = {
@@ -134,6 +157,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     renovationLevel,
     employees: employees || [],
     rivalDeliverers: rivalDeliverers || [],
+    pizzeriaName,
+    pizzeriaColor,
+    hasGlobalized,
   };
 
   // Camera coordinates (lerping towards player)
@@ -289,6 +315,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renovationLevel,
       employees,
       rivalDeliverers,
+      pizzeriaName,
+      pizzeriaColor,
+      hasGlobalized,
     } = renderStateRef.current;
 
     // Clear Canvas with lovely clear blue sky/ocean background
@@ -715,51 +744,68 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // PIZZERIA (Exactly in the center)
-    // Red themed building to represent the rival / original pizzeria
-    const pizzeriaLabel = hasOwnPizzeria ? '🍕 PIZZERÍA RIVAL' : 'PIZZERIA';
-    push3DBox(PIZZERIA_X, PIZZERIA_Y, 0, 48, 48, 30, {
-      top: '#EF4444',   // Red roof
-      front: '#EF4444', // Red walls (matched)
-      side: '#B91C1C',  // Dark red details
-    }, 0, pizzeriaLabel);
+    // Red themed building to represent the rival / original pizzeria, or player's custom brand if globalized
+    let rivalPizzaLabel = 'PIZZERIA';
+    let rivalTopColor = '#EF4444';
+    let rivalWallColor = '#EF4444';
+    let rivalSideColor = '#B91C1C';
+    let rivalPeakColorLighter = '#F87171';
+    let rivalPeakColorDarker = '#DC2626';
 
-    // A gorgeous little red roof peak on top of Pizza shop
-    push3DPyramid(PIZZERIA_X, PIZZERIA_Y, 30, 48, 48, 14, '#F87171', '#DC2626', 0);
+    if (hasGlobalized) {
+      rivalPizzaLabel = `⚡ ${pizzeriaName} ⚡`;
+      rivalTopColor = pizzeriaColor;
+      rivalWallColor = pizzeriaColor;
+      rivalSideColor = adjustHexColor(pizzeriaColor, -0.2);
+      rivalPeakColorLighter = adjustHexColor(pizzeriaColor, 0.2);
+      rivalPeakColorDarker = adjustHexColor(pizzeriaColor, -0.15);
+    } else if (hasOwnPizzeria) {
+      rivalPizzaLabel = '🍕 PIZZERÍA RIVAL';
+    }
+
+    push3DBox(PIZZERIA_X, PIZZERIA_Y, 0, 48, 48, 30, {
+      top: rivalTopColor,
+      front: rivalWallColor,
+      side: rivalSideColor,
+    }, 0, rivalPizzaLabel);
+
+    // A gorgeous roof peak on top of Pizza shop
+    push3DPyramid(PIZZERIA_X, PIZZERIA_Y, 30, 48, 48, 14, rivalPeakColorLighter, rivalPeakColorDarker, 0);
 
     // PIZZERÍA PROPIA / ABANDONADA (In the cell below center)
     // Always drawn so players can view and interact with it from start!
     {
       let ownPizzaLabel = currentVehicleId === 'helicoptero' ? '🏚️ PIZZERÍA ABANDONADA (Comprable)' : '🏚️ PIZZERÍA ABANDONADA (Requiere Helicóptero)';
-      let topColor = '#1E3A8A'; // Deep dark blue
-      let wallColor = '#1E3A8A'; // Deep dark blue (matched)
-      let sideColor = '#0F172A'; // Deep dark navy/grey
-      let peakColor = '#1E40AF'; // Dark blue peak
+      let topColor = '#1E3A8A'; // Deep dark blue default
+      let wallColor = '#1E3A8A';
+      let sideColor = '#0F172A';
+      let peakColor = '#1E40AF';
 
       if (hasOwnPizzeria) {
         if (renovationLevel === 0) {
-          ownPizzaLabel = '🏚️ SU BASE (NIVEL 0)';
-          topColor = '#1E3A8A';
-          wallColor = '#1E293B';
-          sideColor = '#0F172A';
-          peakColor = '#172554';
+          ownPizzaLabel = `🏚️ ${pizzeriaName} (NIVEL 0)`;
+          topColor = adjustHexColor(pizzeriaColor, -0.4);
+          wallColor = adjustHexColor(pizzeriaColor, -0.5);
+          sideColor = adjustHexColor(pizzeriaColor, -0.6);
+          peakColor = adjustHexColor(pizzeriaColor, -0.3);
         } else if (renovationLevel === 1) {
-          ownPizzaLabel = '🍕 BASE (REPARADA L1)';
-          topColor = '#2563EB'; // Royal blue
-          wallColor = '#2563EB'; // Royal blue walls (matched)
-          sideColor = '#1D4ED8'; // Royal blue details
-          peakColor = '#3B82F6';
+          ownPizzaLabel = `🍕 ${pizzeriaName} (L1)`;
+          topColor = pizzeriaColor;
+          wallColor = pizzeriaColor;
+          sideColor = adjustHexColor(pizzeriaColor, -0.2);
+          peakColor = adjustHexColor(pizzeriaColor, 0.2);
         } else if (renovationLevel === 2) {
-          ownPizzaLabel = '🍕 BASE (COMERCIAL L2)';
-          topColor = '#3B82F6'; // Sky blue
-          wallColor = '#3B82F6'; // Sky blue walls (matched)
-          sideColor = '#2563EB'; // Bright blue details
-          peakColor = '#60A5FA';
+          ownPizzaLabel = `🍕 ${pizzeriaName} (L2)`;
+          topColor = adjustHexColor(pizzeriaColor, 0.1);
+          wallColor = adjustHexColor(pizzeriaColor, 0.1);
+          sideColor = adjustHexColor(pizzeriaColor, -0.1);
+          peakColor = adjustHexColor(pizzeriaColor, 0.3);
         } else {
-          ownPizzaLabel = '⚡ BASE IMPERIO L3 ⚡';
-          topColor = '#06B6D4'; // Brilliant cyan blue
-          wallColor = '#06B6D4'; // Cyan walls (matched)
-          sideColor = '#0891B2'; // Deep cyan details
-          peakColor = '#22D3EE';
+          ownPizzaLabel = `⚡ ${pizzeriaName} (L3) ⚡`;
+          topColor = adjustHexColor(pizzeriaColor, 0.25);
+          wallColor = adjustHexColor(pizzeriaColor, 0.25);
+          sideColor = adjustHexColor(pizzeriaColor, 0.05);
+          peakColor = adjustHexColor(pizzeriaColor, 0.45);
         }
       }
 
