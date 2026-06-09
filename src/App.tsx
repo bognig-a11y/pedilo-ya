@@ -312,12 +312,7 @@ export default function App() {
   const [muted, setMuted] = useState(false);
 
   // Tutorial Systems State
-  const [tutorialStep, setTutorialStep] = useState<'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed'>(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('tutorial_shown')) {
-      return 'off';
-    }
-    return 'prompt';
-  });
+  const [tutorialStep, setTutorialStep] = useState<'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed'>('prompt');
   const [businessTutorialStep, setBusinessTutorialStep] = useState<'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed'>('off');
 
   // Core Player States
@@ -1021,99 +1016,104 @@ export default function App() {
     if (gameState !== 'playing') return;
 
     const timer = setTimeout(() => {
-      // 1. Day Clock tick
-      if (dayTimeLeft <= 1) {
-        // Increment Day (Day transitions from `day` to `day + 1`)
-        // Rent Due checks: Only if they DO NOT own their pizzeria! No rent during the tutorial.
-        const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
-        const rentDue = (!hasOwnPizzeria && day % 3 === 0 && !isTutorialActive) ? Math.floor(day / 3) * 500 : 0;
+      const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
 
-        if (rentDue > 0) {
-          if (money < rentDue) {
-            // Game Over! Insolvency lease debt!
-            audio.playFail();
-            setGameState('gameover');
-            return;
-          } else {
-            // Deduct rent safely
-            setMoney(cash => cash - rentDue);
-            audio.playRentPay();
-            setRentPaymentNotice({ amount: rentDue, nextDay: day + 3 });
-            alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 3 días.`);
-          }
-        }
-
-        // Apply new day state updates cleanly
-        setDay(d => d + 1);
+      // 1. Day Clock tick - Locked/Paused during training
+      if (isTutorialActive) {
         setDayTimeLeft(60);
+      } else {
+        if (dayTimeLeft <= 1) {
+          // Increment Day (Day transitions from `day` to `day + 1`)
+          // Rent Due checks: Only if they DO NOT own their pizzeria! No rent during the tutorial.
+          const rentDue = (!hasOwnPizzeria && day % 3 === 0) ? Math.floor(day / 3) * 500 : 0;
 
-        // Tycoon rival growth: Increases every day / minute of holding!
-        if (hasOwnPizzeria && !isRivalDefeated && !hasGlobalized) {
-          const nextDaysHeld = businessDaysHeld + 1;
-          setBusinessDaysHeld(nextDaysHeld);
-
-          const shareLoss = rivalPassiveRate;
-          setPlayerMarketShare(prev => {
-            const nextShare = Math.max(0, prev - shareLoss);
-            if (nextShare <= 0) {
-              if (businessTutorialStep !== 'off' && businessTutorialStep !== 'completed') {
-                // Safeguard during business/corporate tutorial so player can understand without stress
-                alertBanner("⚠️ PARTICIPACIÓN AL 0%. Salvado de Game Over por estar en el tutorial empresarial.");
-                return 5;
-              }
-              // Game Over! Market share hit 0% (rival reaches 100%)
+          if (rentDue > 0) {
+            if (money < rentDue) {
+              // Game Over! Insolvency lease debt!
               audio.playFail();
               setGameState('gameover');
-              return 0;
+              return;
+            } else {
+              // Deduct rent safely
+              setMoney(cash => cash - rentDue);
+              audio.playRentPay();
+              setRentPaymentNotice({ amount: rentDue, nextDay: day + 3 });
+              alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 3 días.`);
             }
-
-            // Warnings
-            const rivalShareGauge = 100 - nextShare;
-            if (rivalShareGauge >= 99) {
-              alertBanner("🚨 ¡La pizzería rival está a punto de monopolizar la isla! (99% Competencia)");
-              audio.playAlert();
-            } else if (rivalShareGauge >= 95) {
-              alertBanner("⚠️ ¡Última oportunidad! Estás a punto de perder todo el mercado. (95% Competencia)");
-              audio.playAlert();
-            } else if (rivalShareGauge >= 90) {
-              alertBanner("❗ ¡Alerta competitiva! La competencia domina la isla. (90% Competencia)");
-              audio.playAlert();
-            }
-
-            setRivalPulse(true);
-            setTimeout(() => setRivalPulse(false), 800);
-
-            return nextShare;
-          });
-
-          // Rival permanent growth bonus increase: Every 3 days (+2% additional growth rate)
-          if (nextDaysHeld > 0 && nextDaysHeld % 3 === 0) {
-            const addedGrowth = 2;
-            const updatedRate = rivalPassiveRate + addedGrowth;
-            setRivalPassiveRate(updatedRate);
-
-            setTimeout(() => {
-              setPlayerMarketShare(currentShare => {
-                const totalRivalShare = 100 - currentShare;
-                alertBanner(`😈 ¡COMPETIDOR FORTALECIDO! El rival obtiene +${addedGrowth}% de crecimiento permanente. Crece +${updatedRate}% por minuto (Rival total: ${totalRivalShare}%).`);
-                audio.playAlert();
-                return currentShare;
-              });
-            }, 100);
           }
-        }
 
-        // Rent warning calculation: Day 2, 5, 8...
-        const nextDay = day + 1;
-        if (!hasOwnPizzeria && nextDay % 3 === 2) {
-          setRentWarning(true);
-          audio.playAlert();
-          setTimeout(() => {
-            setRentWarning(false);
-          }, 2000);
+          // Apply new day state updates cleanly
+          setDay(d => d + 1);
+          setDayTimeLeft(60);
+
+          // Tycoon rival growth: Increases every day / minute of holding!
+          if (hasOwnPizzeria && !isRivalDefeated && !hasGlobalized) {
+            const nextDaysHeld = businessDaysHeld + 1;
+            setBusinessDaysHeld(nextDaysHeld);
+
+            const shareLoss = rivalPassiveRate;
+            setPlayerMarketShare(prev => {
+              const nextShare = Math.max(0, prev - shareLoss);
+              if (nextShare <= 0) {
+                if (businessTutorialStep !== 'off' && businessTutorialStep !== 'completed') {
+                  // Safeguard during business/corporate tutorial so player can understand without stress
+                  alertBanner("⚠️ PARTICIPACIÓN AL 0%. Salvado de Game Over por estar en el tutorial empresarial.");
+                  return 5;
+                }
+                // Game Over! Market share hit 0% (rival reaches 100%)
+                audio.playFail();
+                setGameState('gameover');
+                return 0;
+              }
+
+              // Warnings
+              const rivalShareGauge = 100 - nextShare;
+              if (rivalShareGauge >= 99) {
+                alertBanner("🚨 ¡La pizzería rival está a punto de monopolizar la isla! (99% Competencia)");
+                audio.playAlert();
+              } else if (rivalShareGauge >= 95) {
+                alertBanner("⚠️ ¡Última oportunidad! Estás a punto de perder todo el mercado. (95% Competencia)");
+                audio.playAlert();
+              } else if (rivalShareGauge >= 90) {
+                alertBanner("❗ ¡Alerta competitiva! La competencia domina la isla. (90% Competencia)");
+                audio.playAlert();
+              }
+
+              setRivalPulse(true);
+              setTimeout(() => setRivalPulse(false), 800);
+
+              return nextShare;
+            });
+
+            // Rival permanent growth bonus increase: Every 3 days (+2% additional growth rate)
+            if (nextDaysHeld > 0 && nextDaysHeld % 3 === 0) {
+              const addedGrowth = 2;
+              const updatedRate = rivalPassiveRate + addedGrowth;
+              setRivalPassiveRate(updatedRate);
+
+              setTimeout(() => {
+                setPlayerMarketShare(currentShare => {
+                  const totalRivalShare = 100 - currentShare;
+                  alertBanner(`😈 ¡COMPETIDOR FORTALECIDO! El rival obtiene +${addedGrowth}% de crecimiento permanente. Crece +${updatedRate}% por minuto (Rival total: ${totalRivalShare}%).`);
+                  audio.playAlert();
+                  return currentShare;
+                });
+              }, 100);
+            }
+          }
+
+          // Rent warning calculation: Day 2, 5, 8...
+          const nextDay = day + 1;
+          if (!hasOwnPizzeria && nextDay % 3 === 2) {
+            setRentWarning(true);
+            audio.playAlert();
+            setTimeout(() => {
+              setRentWarning(false);
+            }, 2000);
+          }
+        } else {
+          setDayTimeLeft(prev => prev - 1);
         }
-      } else {
-        setDayTimeLeft(prev => prev - 1);
       }
 
       // 2. Active Deliveries clocks tick
@@ -1583,6 +1583,8 @@ export default function App() {
     setUpgrades({ ganancia: 0, suerte: 0, fuerza: 0 });
     setFailures(0);
     setCompletedOrdersCount(0);
+    setTutorialStep('prompt');
+    setBusinessTutorialStep('off');
     setPlayerX(0);
     setPlayerY(50);
     playerXRef.current = 0;
@@ -1838,17 +1840,17 @@ export default function App() {
             
             {/* HIGH VISIBILITY GUIDED TUTORIAL BANNER */}
             {tutorialStep !== 'off' && tutorialStep !== 'completed' && (
-              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-amber-500 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
-                {/* Background neon glow */}
-                <div className="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/20 rounded-full blur-xl pointer-events-none" />
+              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-amber-600 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
+                {/* Background ambient glow */}
+                <div className="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
                 
-                <div className="flex items-start gap-3.5 relative">
-                  <span className="text-3 shadow shrink-0 mt-0.5 select-none text-2xl">🎓</span>
+                <div className="flex items-start gap-4 relative">
+                  <span className="text-3 outline-none shrink-0 mt-0.5 select-none text-2xl">🎓</span>
                   <div className="flex-1 text-left space-y-2">
                     <div className="flex justify-between items-center gap-2">
-                      <h4 className="font-sans font-black text-amber-500 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                      <h4 className="font-sans font-black text-amber-500 text-xs sm:text-sm uppercase tracking-widest flex items-center gap-1.5 leading-none">
                         <span>Guía de Iniciación</span>
-                        <span className="bg-amber-500 text-slate-950 text-[9px] font-mono font-black px-2 py-0.5 rounded-full select-none leading-none">
+                        <span className="bg-amber-600 text-slate-950 text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full select-none leading-none">
                           {tutorialStep === 'pizzeria' && 'PASO 1 / 4'}
                           {tutorialStep === 'delivery' && 'PASO 2 / 4'}
                           {tutorialStep === 'concesionario' && 'PASO 3 / 4'}
@@ -1860,46 +1862,35 @@ export default function App() {
                           setTutorialStep('off');
                           localStorage.setItem('tutorial_shown', 'true');
                           audio.playRentPay();
-                          alertBanner("🏁 Comienzo normal: ¡Suerte en la isla del delivery!");
+                          alertBanner("Comienzo de partida sin asistencia.");
                         }}
                         className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
                       >
-                        Omitir tutorial ✕
+                        Omitir guía ✕
                       </button>
                     </div>
 
-                    <div className="text-slate-100 text-[11px] sm:text-[12px] leading-relaxed font-bold tracking-tight">
+                    <div className="text-slate-100 text-[12px] sm:text-[13px] leading-relaxed font-semibold tracking-tight">
                       {tutorialStep === 'pizzeria' && (
                         <span>
-                          <strong>ENTRAR A LA PIZZERÍA [0, 0]</strong>: Dirígete al centro exacto del mapa. Busca la columna de <span className="text-amber-400 underline font-black">luz celestial dorada</span> que parpadea. Presiona <kbd className="bg-slate-800 text-white p-1 rounded font-mono text-[9px] uppercase border border-slate-600 font-bold">Espacio</kbd> o acércate para entrar y <span className="text-amber-300 font-black">Aceptar tu primer pedido</span>.
+                          <strong>ESTACIÓN DE PEDIDOS</strong>: Diríjase a la pizzería central iluminada por el gran haz dorado. Siga el rumbo que le indica la <strong className="text-amber-400">flecha flotante interactiva</strong> sobre su posición. Al situarse en la entrada, presione <kbd className="bg-slate-800 text-white px-1.5 py-0.5 rounded font-mono text-xs border border-slate-700 font-bold">Espacio</kbd> para aceptar el cargo.
                         </span>
                       )}
                       {tutorialStep === 'delivery' && (
                         <span>
-                          <strong>COMPLETAR EL ENVÍO</strong>: ¡Tienes una pizza fresca en tu mochila! Sigue la aguja de la <span className="text-amber-400 font-extrabold">brújula arriba a la izquierda</span> o la columna de <span className="text-emerald-400 font-black underline">luz verde celestial</span> para ubicar la casa objetivo y acércate para entregarla. ¡Estás a salvo de penalizaciones de tiempo!
+                          <strong>ENTREGA DE CARGA</strong>: Dispone de un pedido activo en su equipaje. Siga el pilar verde celestial o la <strong className="text-amber-400">flecha de navegación</strong> hacia el domicilio de destino para concretar la entrega de forma exitosa.
                         </span>
                       )}
                       {tutorialStep === 'concesionario' && (
                         <span>
-                          <strong>IR AL CONCESIONARIO EN [-245, 0] 🚲</strong>: ¡Felicidades por cobrar tu primer envío! Para comprar vehículos y mejorar tu velocidad, camina en línea recta hacia la <span className="text-sky-400 font-black underline">IZQUIERDA</span> del mapa. Busca la tienda celeste y la enorme <span className="text-sky-400 font-black">columna de luz azul cielo</span>.
+                          <strong>CONCESIONARIO DE VEHÍCULOS</strong>: El cobro ha sido procesado adecuadamente. Para adquirir medios de transporte y optimizar la velocidad de traslado, siga la <strong className="text-amber-400 font-bold">flecha indicadora</strong> hacia el pilar celeste celestial del establecimiento comercial.
                         </span>
                       )}
                       {tutorialStep === 'casino' && (
                         <span>
-                          <strong>IR AL CASINO DE LA ISLA EN [245, 0] 🎰</strong>: ¡Grandioso! El paso final es visitar el Casino en el extremo <span className="text-purple-400 font-black underline">DERECHO</span> de la isla. Sigue la brújula y busca el gran pilar de <span className="text-purple-400 font-black">luz violeta brillante</span>. ¡Entra allí para finalizar tu entrenamiento!
+                          <strong>SALÓN DE RECREACIÓN</strong>: Fase final de orientación en la isla. Diríjase al pilar violeta brillante guiándose por la <strong className="text-amber-400">flecha flotante</strong> para concluir el adiestramiento básico de operaciones.
                         </span>
                       )}
-                    </div>
-
-                    {/* Navigation assistance */}
-                    <div className="text-[10px] bg-slate-900 border border-slate-800 p-2 text-slate-300 rounded-xl leading-normal shrink-0">
-                      <p className="font-black text-[9px] text-amber-500 uppercase tracking-wide">🗺️ Indicaciones detalladas para llegar:</p>
-                      <p className="font-semibold text-slate-400 mt-0.5">
-                        {tutorialStep === 'pizzeria' && '📍 Camina hacia el centro de la pantalla hasta pararte sobre el círculo dorado resplandeciente.'}
-                        {tutorialStep === 'delivery' && '📍 La brújula (arriba izq.) indica la dirección hacia la casa de entrega. El indicador rosa abajo te marca la distancia en metros.'}
-                        {tutorialStep === 'concesionario' && '📍 Camina directamente hacia el carril IZQUIERDO desde el centro. El concesionario de vehículos tiene un pilar de luz azul intenso.'}
-                        {tutorialStep === 'casino' && '📍 Camina directamente hacia el carril DERECHO desde el centro. El casino tiene un pilar de luz violeta parpadeante.'}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -1908,16 +1899,14 @@ export default function App() {
 
             {/* HIGH VISIBILITY BUSINESS TUTORIAL BANNER */}
             {businessTutorialStep !== 'off' && businessTutorialStep !== 'completed' && (
-              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-pink-500 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
-                <div className="absolute -top-12 -right-12 w-24 h-24 bg-pink-500/20 rounded-full blur-xl pointer-events-none" />
-                
-                <div className="flex items-start gap-3.5 relative">
-                  <span className="text-3 shadow shrink-0 mt-0.5 select-none text-2xl">🏢</span>
+              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-pink-600 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
+                <div className="flex items-start gap-4 relative">
+                  <span className="text-3 shrink-0 mt-0.5 select-none text-2xl">🏢</span>
                   <div className="flex-1 text-left space-y-2">
                     <div className="flex justify-between items-center gap-2">
-                      <h4 className="font-sans font-black text-pink-400 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 leading-none">
-                        <span>Imperio Pizzería</span>
-                        <span className="bg-pink-500 text-white text-[9px] font-mono font-black px-2 py-0.5 rounded-full select-none leading-none">
+                      <h4 className="font-sans font-black text-pink-400 text-xs sm:text-sm uppercase tracking-widest flex items-center gap-1.5 leading-none">
+                        <span>Gestión Comercial</span>
+                        <span className="bg-pink-600 text-white text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full select-none leading-none">
                           {businessTutorialStep === 'upgrades' && 'PASO 1 / 3'}
                           {businessTutorialStep === 'competition' && 'PASO 2 / 3'}
                           {businessTutorialStep === 'staff' && 'PASO 3 / 3'}
@@ -1928,7 +1917,7 @@ export default function App() {
                           setBusinessTutorialStep('off');
                           localStorage.setItem('business_shown', 'true');
                           audio.playRentPay();
-                          alertBanner("💼 ¡Suerte construyendo tu imperio de la pizza!");
+                          alertBanner("Iniciando operaciones comerciales.");
                         }}
                         className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
                       >
@@ -1936,20 +1925,20 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="text-slate-100 text-[11px] sm:text-[12px] leading-relaxed font-bold tracking-tight">
+                    <div className="text-slate-100 text-[12px] sm:text-[13px] leading-relaxed font-semibold tracking-tight">
                       {businessTutorialStep === 'upgrades' && (
                         <span>
-                          <strong>INGRESA A TU BASE EN EL SUR [0, 245]</strong>: Dirígete al <span className="text-pink-400 font-extrabold underline">SUR de la isla</span> guiándote por el pilar de luz rosa. Abre la consola de administración tocando <kbd className="bg-slate-800 text-white p-1 rounded font-mono text-[9px] uppercase border border-slate-600 font-bold">Espacio</kbd> para activar las mejoras de cocina y renovar el edificio dilapidated.
+                          <strong>SISTEMA DE MEJORAS</strong>: Acceda a su base para habilitar las mejoras de cocina y comenzar la reestructuración del edificio. Utilice la <strong className="text-pink-400">flecha de orientación</strong> para llegar al pilar rosa celestial.
                         </span>
                       )}
                       {businessTutorialStep === 'competition' && (
                         <span>
-                          <strong>LA BARRA DE PARTICIPACIÓN</strong>: En la barra de arriba puedes observar la <span className="text-pink-400 font-extrabold">Barra de Competencia</span>. El rival intentará acaparar tu clientela (+rate/min). Si tu barra llega a 0%, perderás. ¡Debes mantener la marca viva haciendo entregas o contratando personal!
+                          <strong>REPARTO DE MERCADO</strong>: Observe el panel de competencia. Su oponente comercial intentará absorber clientes continuamente. Mantenga activa la presencia de su marca completando entregas o reclutando repartidores autónomos.
                         </span>
                       )}
                       {businessTutorialStep === 'staff' && (
                         <span>
-                          <strong>CONTRATAR REPARTIDORES AUTÓNOMOS</strong>: Abre la consola en tu Base, ve a la pestaña <span className="text-pink-400 font-extrabold">"EMPLEADOS"</span> y contrata a tu primer delivery automático. ¡Ellos defenderán tu participación de mercado sin que tengas que manejar!
+                          <strong>RECLUTAMIENTO DE PERSONAL</strong>: Acceda a la sección de Personal dentro de la consola de administración base para reclutar repartidores autónomos. Estos automatizarán las entregas de forma pasiva.
                         </span>
                       )}
                     </div>
@@ -1976,8 +1965,8 @@ export default function App() {
                   <span className="inline-block w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
                   <span>
                     {hasOwnPizzeria 
-                      ? 'Sin pedidos activos. Dirígete a tu Base Propia [0, 245] para asignar el reparto.' 
-                      : 'Sin pedidos activos. Dirígete a la Pizzería central [0, 0] para tomar entregas.'}
+                      ? 'Sin pedidos activos. Diríjase a su Base Propia siguiendo la flecha orientadora.' 
+                      : 'Sin pedidos activos. Siga la flecha flotante hacia la Pizzería central.'}
                   </span>
                 </div>
               )}
@@ -2425,42 +2414,42 @@ export default function App() {
       {/* 8. Initial Tutorial Invite Dialog */}
       {tutorialStep === 'prompt' && gameState === 'playing' && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-4 border-amber-500 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
+          <div className="bg-slate-900 border-4 border-amber-600 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
             <div>
               <span className="text-5xl inline-block animate-bounce">🎓</span>
-              <h3 className="text-xl font-black text-amber-400 font-sans uppercase mt-3">¿Deseas realizar el tutorial?</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aprende las mecánicas de entrega sin presión</p>
+              <h3 className="text-lg font-black text-amber-500 font-sans uppercase mt-3">Guía de Introducción</h3>
+              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Procedimiento de adiestramiento operativo</p>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-              Te guiaremos paso a paso a través de las misiones clave (Pedidos, Vehículos, Casino) con una guía celeste visual constante.
+            <p className="text-xs text-slate-350 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800 text-left font-medium">
+              Recomendamos iniciar el adiestramiento para familiarizarse con las mecánicas fundamentales (Gestión de pedidos, adquisición de vehículos y visita al casino).
               <br /><br />
-              <span className="text-rose-400 font-bold">🕊️ PROTECCIÓN CIVIL INTENSA</span>:
-              Mientras el tutorial esté activo, <strong className="text-white">no pagarás renta</strong> y estarás <strong className="text-white">a salvo de cualquier Game Over</strong> por fallar entregas.
+              <span className="text-amber-500 font-bold">⚠️ SUSPENSIÓN TEMPORAL DE RENTAS</span>:
+              Mientras la guía permanezca activa, el contador diario de rentas y las penalizaciones de tiempo estarán completamente suspendidos para permitir un aprendizaje óptimo.
             </p>
 
-            <div className="flex gap-3 mt-1">
+            <div className="flex gap-3 mt-1 font-bold">
               <button
                 onClick={() => {
                   setTutorialStep('off');
                   localStorage.setItem('tutorial_shown', 'true');
                   audio.playRentPay();
-                  alertBanner("🏁 Comienzo normal: ¡Suerte en la isla del delivery!");
+                  alertBanner("Comienzo de operaciones sin guía.");
                 }}
                 className="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white text-xs font-black uppercase rounded-2xl transition cursor-pointer"
               >
-                No, gracias
+                Declinar
               </button>
               <button
                 onClick={() => {
                   setTutorialStep('pizzeria');
                   localStorage.setItem('tutorial_shown', 'true');
                   audio.playUpgrade();
-                  alertBanner("🎓 TUTORIAL CAPTADO: Dirígete a la Pizzería central ([0,0]) iluminada con el cubo dorado.");
+                  alertBanner("Guía iniciada. Diríjase al objetivo indicado por la flecha.");
                 }}
-                className="w-1/2 py-3 bg-amber-500 hover:bg-amber-600 text-slate-955 text-xs font-black uppercase rounded-2xl transition shadow-md cursor-pointer"
+                className="w-1/2 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black uppercase rounded-2xl transition shadow-md cursor-pointer"
               >
-                ¡Sí, por favor!
+                Aceptar Guía
               </button>
             </div>
           </div>
@@ -2470,44 +2459,43 @@ export default function App() {
       {/* 9. Business/Corporate Corporate Tutorial Invite Dialog */}
       {businessTutorialStep === 'prompt' && gameState === 'playing' && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-4 border-pink-500 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
+          <div className="bg-slate-900 border-4 border-pink-600 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
             <div>
-              <span className="text-5xl inline-block animate-bounce">🏢🍕🏢</span>
-              <h3 className="text-xl font-black text-pink-400 font-sans uppercase mt-3">¿Deseas realizar el tutorial empresarial?</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aprende a dominar el mercado corporativo</p>
+              <span className="text-5xl inline-block animate-bounce">🏢</span>
+              <h3 className="text-lg font-black text-pink-400 font-sans uppercase mt-3">Guía Administrativa</h3>
+              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Mecánicas de expansión empresarial</p>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800">
-              Ahora que has comprado la propiedad, la pizzería rival te hará la competencia por capturar participación de mercado.
+            <p className="text-xs text-slate-350 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800 text-left font-medium">
+              Aprenderá las dinámicas de competencia de mercado que se activan tras la adquisición de su inmueble operativo.
               <br /><br />
-              <span className="text-emerald-400 font-bold">🛠️ GUÍA ESTRATÉGICA ACTIVA</span>:
-              Te guiaremos a través de la interfaz administrativa para mejorar tu base, contratar repartidores y derrotar al rival sin riesgo de quiebra.
+              <span className="text-pink-400 font-bold">🛠️ ORIENTACIÓN ESTRATÉGICA</span>:
+              Se le guiará a través del panel de control empresarial para optimizar su base de operaciones y reclutar personal de reparto calificado.
             </p>
 
-            <div className="flex gap-3 mt-1">
+            <div className="flex gap-3 mt-1 font-bold">
               <button
                 onClick={() => {
                   setBusinessTutorialStep('off');
                   localStorage.setItem('business_shown', 'true');
                   audio.playRentPay();
-                  alertBanner("💼 ¡Suerte construyendo tu imperio de la pizza!");
+                  alertBanner("Operaciones corporativas regulares activadas.");
                 }}
-                className="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white text-xs font-black uppercase rounded-2xl transition cursor-pointer"
+                className="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-black uppercase rounded-2xl transition cursor-pointer"
               >
-                No, gracias
+                Declinar
               </button>
               <button
                 onClick={() => {
                   setBusinessTutorialStep('upgrades');
                   localStorage.setItem('business_shown', 'true');
                   audio.playUpgrade();
-                  // Open the own pizzeria modal directly!
                   setIsOwnPizzeriaOpen(true);
-                  alertBanner("🎓 INTERFAZ CORPORATIVA: Entrando a la consola de administración. Sigue los banners explicativos.");
+                  alertBanner("Módulo administrativo activado. Proceda con los requerimientos.");
                 }}
                 className="w-1/2 py-3 bg-pink-500 hover:bg-pink-600 text-white text-xs font-black uppercase rounded-2xl transition shadow-md cursor-pointer"
               >
-                ¡Sí, por favor!
+                Aceptar Guía
               </button>
             </div>
           </div>

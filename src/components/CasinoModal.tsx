@@ -72,6 +72,7 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
   tutorialStep,
 }) => {
   const [activeMode, setActiveMode] = useState<Mode>('menu');
+  const [isTutorialDismissed, setIsTutorialDismissed] = useState(false);
 
   // General Slots State
   const [slotBet, setSlotBet] = useState(50);
@@ -772,15 +773,22 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
           {/* MENU VIEW */}
           {activeMode === 'menu' && (
             <div className="space-y-6">
-              {tutorialStep === 'casino' && (
-                <div className="bg-purple-950 text-slate-100 p-5 rounded-2xl border-2 border-purple-400 flex items-center gap-4 animate-pulse">
-                  <span className="text-4xl shrink-0">🎉🏆🎉</span>
-                  <div className="text-xs">
-                    <h4 className="font-extrabold text-purple-200 text-sm uppercase tracking-wide">¡Felicidades, completaste la guía de iniciación!</h4>
-                    <p className="mt-1 text-slate-350 font-semibold leading-relaxed">
-                      Llegaste al majestuoso Casino de la Isla. Aquí concluye el tutorial inicial guiado. A partir de ahora, tienes control total, se cobrará renta de manera regular cada 3 días y podrás perder por acumular fallos si te descuidas. ¡Conviértete en el repartidor legendario más rico e influyente de la isla!
+              {(tutorialStep === 'casino' || tutorialStep === 'completed') && !isTutorialDismissed && (
+                <div className="bg-slate-900 text-slate-100 p-5 rounded-2xl border-2 border-purple-505 flex flex-col sm:flex-row items-start sm:items-center gap-4 relative overflow-hidden shadow-2xl">
+                  <span className="text-4xl shrink-0">✨</span>
+                  <div className="space-y-1.5 flex-1 pr-6">
+                    <h4 className="font-extrabold text-purple-450 text-sm uppercase tracking-wider">Fase de adiestramiento finalizada</h4>
+                    <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                      Ha asimilado los principios operativos básicos de navegación, finanzas y desplazamientos en la isla. Su entrenamiento inicial ha concluido. Su meta definitiva ahora es acumular el capital necesario para lograr alguno de los dos objetivos finales supremos de la campaña: adquirir el <strong className="text-yellow-405">Helicóptero de escape</strong> para abandonar la isla o comprar la <strong className="text-pink-405">Pizzería rival</strong> para fundar su imperio comercial absoluto.
                     </p>
                   </div>
+                  <button
+                    onClick={() => setIsTutorialDismissed(true)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-white transition cursor-pointer text-xs font-black p-1 bg-slate-950/80 border border-slate-850 rounded-lg"
+                    title="Ocultar mensaje"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 

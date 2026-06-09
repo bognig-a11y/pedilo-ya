@@ -713,7 +713,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // TUTORIAL VISUAL BEACONS AND CELESTIAL GLOW INDICATORS
     const pushCheckpoint = (cx: number, cy: number, radius: number, color: string, outlineColor: string, label: string) => {
-      const numPts = 12;
+      // 1. Draw a massive base ground circle
+      const numPts = 16;
       const pts: Point3D[] = [];
       for (let i = 0; i < numPts; i++) {
         const a = (i / numPts) * Math.PI * 2;
@@ -728,15 +729,65 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       faces.push({
         points: pts,
-        color,
-        outlineColor,
-        outlineWidth: 2.5,
-        text: label.toUpperCase(),
+        color: color,
+        outlineColor: outlineColor,
+        outlineWidth: 3.5,
+        text: `📍 LOCALIZACIÓN: ${label.toUpperCase()}`,
         avgDepth: avgD,
       });
 
-      // Push floating neon double stack above it to look super cool and visible from afar in 3D!
-      push3DBox(cx, cy, 32, 5, 5, 14, { top: outlineColor, front: color, side: outlineColor }, 0, `📍 ${label}`);
+      // 2. Push a colossal celestial glowing beam / spire from ground up to Z = 110!
+      // This is toweringly high so they can spot it immediately regardless of buildings or camera distance.
+      const pulseSize = 12 + Math.sin(Date.now() / 250) * 1.5;
+      push3DBox(
+        cx,
+        cy,
+        0,
+        pulseSize,
+        pulseSize,
+        110,
+        {
+          top: '#FFFFFF',
+          front: color,
+          side: outlineColor
+        },
+        0,
+        undefined
+      );
+
+      // 3. Add an outer glowing defensive field base (wider, shorter)
+      push3DBox(
+        cx,
+        cy,
+        0,
+        radius * 1.5,
+        radius * 1.5,
+        12,
+        {
+          top: 'rgba(255, 255, 255, 0.1)',
+          front: color,
+          side: color
+        },
+        0,
+        undefined
+      );
+
+      // 4. Add a high-altitude floating label box that resides at the top of the tower (Z = 110)
+      push3DBox(
+        cx,
+        cy,
+        110,
+        9,
+        9,
+        9,
+        {
+          top: '#FFFFFF',
+          front: outlineColor,
+          side: outlineColor
+        },
+        0,
+        `👑 ${label.toUpperCase()}`
+      );
     };
 
     if (tutorialStep === 'pizzeria') {
@@ -1291,25 +1342,68 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const dy = targetY - playerY;
     const distToTarget = Math.sqrt(dx * dx + dy * dy);
 
-    if (distToTarget > 60) {
+    if (distToTarget > 40) {
       const targetAngle = Math.atan2(dy, dx);
-      // Clean spinning glowing pointer at the bottom/top of the screen or around player!
-      // Draw around the player disk!
-      const radiusAroundPlayer = 20;
-      const arrowPoint = {
-        x: playerX + Math.cos(targetAngle) * radiusAroundPlayer,
-        y: playerY + Math.sin(targetAngle) * radiusAroundPlayer,
-        z: playerZ + 4,
+      // Floating, bobbing 3D chevron arrow hovering precisely above the player's head!
+      const bounce = Math.sin(Date.now() / 150) * 3.5;
+      const arrowZ = playerZ + 36 + bounce;
+
+      const tip = {
+        x: playerX + Math.cos(targetAngle) * 16,
+        y: playerY + Math.sin(targetAngle) * 16,
+        z: arrowZ,
       };
-      
-      const screenArrow = proj(arrowPoint);
+      const leftBase = {
+        x: playerX + Math.cos(targetAngle + Math.PI * 0.8) * 10,
+        y: playerY + Math.sin(targetAngle + Math.PI * 0.8) * 10,
+        z: arrowZ,
+      };
+      const rightBase = {
+        x: playerX + Math.cos(targetAngle - Math.PI * 0.8) * 10,
+        y: playerY + Math.sin(targetAngle - Math.PI * 0.8) * 10,
+        z: arrowZ,
+      };
+      const notch = {
+        x: playerX + Math.cos(targetAngle + Math.PI) * 4,
+        y: playerY + Math.sin(targetAngle + Math.PI) * 4,
+        z: arrowZ,
+      };
+
+      const pTip = proj(tip);
+      const pLeft = proj(leftBase);
+      const pRight = proj(rightBase);
+      const pNotch = proj(notch);
+
       ctx.beginPath();
-      ctx.arc(screenArrow.x, screenArrow.y, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = hasActiveOrders ? '#F43F5E' : '#EAB308'; // red for delivery, golden for pizza shop
+      ctx.moveTo(pTip.x, pTip.y);
+      ctx.lineTo(pLeft.x, pLeft.y);
+      ctx.lineTo(pNotch.x, pNotch.y);
+      ctx.lineTo(pRight.x, pRight.y);
+      ctx.closePath();
+
+      // Color scheme dynamic pairing
+      if (hasActiveOrders) {
+        ctx.fillStyle = '#EF4444'; // Vibrant red for active delivery
+      } else if (tutorialStep === 'concesionario') {
+        ctx.fillStyle = '#0EA5E9'; // Sky blue for car dealer
+      } else if (tutorialStep === 'casino') {
+        ctx.fillStyle = '#A855F7'; // Purple for casino
+      } else if (businessTutorialStep === 'upgrades') {
+        ctx.fillStyle = '#EC4899'; // Pink for base upgrades
+      } else {
+        ctx.fillStyle = '#EAB308'; // Amber/Golden for central pizzeria
+      }
+
       ctx.fill();
       ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
+
+      // Inner glow indicator for modern detail
+      ctx.beginPath();
+      ctx.arc(pNotch.x, pNotch.y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
     }
 
     // MAP STUN EFFECT OVERLAY
