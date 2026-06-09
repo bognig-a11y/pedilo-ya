@@ -18,13 +18,18 @@ interface GameCanvasProps {
   vagabonds: Vagabond[];
   activeOrders: Order[];
   onPlayerMove: (x: number, y: number, angle: number) => void;
-  onInteract: (zone: 'pizzeria' | 'casino' | 'concesionario' | 'none') => void;
+  onInteract: (zone: 'pizzeria' | 'casino' | 'concesionario' | 'own_pizzeria' | 'pizzeria_abandonada' | 'rival_pizzeria_defeated' | 'none') => void;
   onEnterCorner: (cornerIndex: number) => void;
   keysPressed: { [key: string]: boolean };
   virtualDirection: { x: number; y: number };
   isStunned: boolean;
   isSlowed: boolean;
   isVictory: boolean;
+  hasOwnPizzeria: boolean;
+  playerMarketShare: number;
+  renovationLevel: number;
+  employees: any[];
+  rivalDeliverers?: any[];
 }
 
 // 3D Projection & Painter utility types
@@ -61,19 +66,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   isStunned,
   isSlowed,
   isVictory,
+  hasOwnPizzeria,
+  playerMarketShare,
+  renovationLevel,
+  employees,
+  rivalDeliverers,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Interaction Prompts zone state
-  const [activePrompt, setActivePrompt] = useState<'pizzeria' | 'casino' | 'concesionario' | 'none'>('none');
+  const [activePrompt, setActivePrompt] = useState<'pizzeria' | 'casino' | 'concesionario' | 'own_pizzeria' | 'pizzeria_abandonada' | 'rival_pizzeria_defeated' | 'none'>('none');
 
   // Coordinates helper values
   const PIZZERIA_X = 0;
   const PIZZERIA_Y = 0;
-  const DEALER_X = -130;
-  const DEALER_Y = -20;
-  const CASINO_X = 130;
-  const CASINO_Y = -20;
+  const DEALER_X = -245;
+  const DEALER_Y = 0;
+  const CASINO_X = 245;
+  const CASINO_Y = 0;
+
+  // New Pizzeria Base Coordinates
+  const OWN_PIZZERIA_X = 0;
+  const OWN_PIZZERIA_Y = 245;
 
   // Helipad positions in the 4 corners of the map (-450 to 450)
   const CORNERS = [
@@ -96,6 +110,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     activeOrders,
     isStunned,
     isSlowed,
+    hasOwnPizzeria,
+    playerMarketShare,
+    renovationLevel,
+    employees: employees || [],
+    rivalDeliverers: rivalDeliverers || [],
   });
 
   renderStateRef.current = {
@@ -110,6 +129,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     activeOrders,
     isStunned,
     isSlowed,
+    hasOwnPizzeria,
+    playerMarketShare,
+    renovationLevel,
+    employees: employees || [],
+    rivalDeliverers: rivalDeliverers || [],
   };
 
   // Camera coordinates (lerping towards player)
@@ -199,17 +223,34 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const distPizza = Math.sqrt((playerX - PIZZERIA_X) ** 2 + (playerY - PIZZERIA_Y) ** 2);
     const distDealer = Math.sqrt((playerX - DEALER_X) ** 2 + (playerY - DEALER_Y) ** 2);
     const distCasino = Math.sqrt((playerX - CASINO_X) ** 2 + (playerY - CASINO_Y) ** 2);
+    const distOwnPizza = Math.sqrt((playerX - OWN_PIZZERIA_X) ** 2 + (playerY - OWN_PIZZERIA_Y) ** 2);
 
     let active: typeof activePrompt = 'none';
-    if (distPizza < 45) active = 'pizzeria';
-    else if (distDealer < 45) active = 'concesionario';
-    else if (distCasino < 45) active = 'casino';
+
+    if (!hasOwnPizzeria) {
+      if (distPizza < 45) {
+        active = 'pizzeria';
+      } else if (distOwnPizza < 45) {
+        active = 'pizzeria_abandonada';
+      }
+    } else {
+      if (distOwnPizza < 45) {
+        active = 'own_pizzeria';
+      } else if (distPizza < 45 && playerMarketShare === 100) {
+        active = 'rival_pizzeria_defeated';
+      }
+    }
+
+    if (active === 'none') {
+      if (distDealer < 45) active = 'concesionario';
+      else if (distCasino < 45) active = 'casino';
+    }
 
     setActivePrompt(active);
     onInteract(active);
 
-    // Also check corner helicopter escapes
-    if (currentVehicleId === 'helicoptero') {
+    // Also check corner helicopter escapes - Only active if player doesn't have their own corporate base yet
+    if (currentVehicleId === 'helicoptero' && !hasOwnPizzeria) {
       CORNERS.forEach((corner, index) => {
         const cornerDist = Math.sqrt((playerX - corner.x) ** 2 + (playerY - corner.y) ** 2);
         if (cornerDist < 50) {
@@ -217,7 +258,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
     }
-  }, [playerX, playerY, currentVehicleId]);
+  }, [playerX, playerY, currentVehicleId, hasOwnPizzeria, playerMarketShare]);
 
 
   // RENDERING ENGINE
@@ -243,6 +284,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       activeOrders,
       isStunned,
       isSlowed,
+      hasOwnPizzeria,
+      playerMarketShare,
+      renovationLevel,
+      employees,
+      rivalDeliverers,
     } = renderStateRef.current;
 
     // Clear Canvas with lovely clear blue sky/ocean background
@@ -472,17 +518,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // DRAW STREETS & ROADS (Tarmac grey - subdivided segment-by-segment to prevent projection stretching)
-    const streetPlanners = [
-      // Central avenues crossing the island
-      { x: -440, y: -15, w: 880, h: 30, isVert: false },
-      { x: -15, y: -440, w: 30, h: 880, isVert: true },
+    const STREET_COORDS = [-368, -123, 123, 368];
+    const STREET_WIDTH = 22;
 
-      // Middle ring streets
-      { x: -250, y: -250, w: 500, h: 18, isVert: false },
-      { x: -250, y: 240, w: 500, h: 18, isVert: false },
-      { x: -250, y: -250, w: 18, h: 500, isVert: true },
-      { x: 245, y: -250, w: 18, h: 500, isVert: true },
-    ];
+    const streetPlanners: { x: number; y: number; w: number; h: number; isVert: boolean }[] = [];
+
+    // 4 vertical streets
+    STREET_COORDS.forEach(X_c => {
+      streetPlanners.push({
+        x: X_c - STREET_WIDTH / 2,
+        y: -440,
+        w: STREET_WIDTH,
+        h: 880,
+        isVert: true
+      });
+    });
+
+    // 4 horizontal streets
+    STREET_COORDS.forEach(Y_c => {
+      streetPlanners.push({
+        x: -440,
+        y: Y_c - STREET_WIDTH / 2,
+        w: 880,
+        h: STREET_WIDTH,
+        isVert: false
+      });
+    });
 
     streetPlanners.forEach(st => {
       const segmentSize = 40;
@@ -612,7 +673,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     });
 
     // 4 CORNER DOCKS / HELIPADS (Rescue escapes)
-    if (currentVehicleId === 'helicoptero') {
+    if (currentVehicleId === 'helicoptero' && !hasOwnPizzeria) {
       CORNERS.forEach((c, idx) => {
         // Draw a circular checkered pad on floor
         const numPts = 10;
@@ -654,15 +715,62 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // PIZZERIA (Exactly in the center)
-    // Red, White, Green stylized building with pizza banner
+    // Red themed building to represent the rival / original pizzeria
+    const pizzeriaLabel = hasOwnPizzeria ? '🍕 PIZZERÍA RIVAL' : 'PIZZERIA';
     push3DBox(PIZZERIA_X, PIZZERIA_Y, 0, 48, 48, 30, {
-      top: '#10B981',   // Pizza green roof
-      front: '#F9FAFB', // White walls
-      side: '#EF4444',  // Italian red side columns
-    }, 0, 'PIZZERIA');
+      top: '#EF4444',   // Red roof
+      front: '#EF4444', // Red walls (matched)
+      side: '#B91C1C',  // Dark red details
+    }, 0, pizzeriaLabel);
 
-    // A gorgeous little yellow roof peak on top of Pizza shop
-    push3DPyramid(PIZZERIA_X, PIZZERIA_Y, 30, 48, 48, 14, '#FCD34D', '#FBBF24', 0);
+    // A gorgeous little red roof peak on top of Pizza shop
+    push3DPyramid(PIZZERIA_X, PIZZERIA_Y, 30, 48, 48, 14, '#F87171', '#DC2626', 0);
+
+    // PIZZERÍA PROPIA / ABANDONADA (In the cell below center)
+    // Always drawn so players can view and interact with it from start!
+    {
+      let ownPizzaLabel = currentVehicleId === 'helicoptero' ? '🏚️ PIZZERÍA ABANDONADA (Comprable)' : '🏚️ PIZZERÍA ABANDONADA (Requiere Helicóptero)';
+      let topColor = '#1E3A8A'; // Deep dark blue
+      let wallColor = '#1E3A8A'; // Deep dark blue (matched)
+      let sideColor = '#0F172A'; // Deep dark navy/grey
+      let peakColor = '#1E40AF'; // Dark blue peak
+
+      if (hasOwnPizzeria) {
+        if (renovationLevel === 0) {
+          ownPizzaLabel = '🏚️ SU BASE (NIVEL 0)';
+          topColor = '#1E3A8A';
+          wallColor = '#1E293B';
+          sideColor = '#0F172A';
+          peakColor = '#172554';
+        } else if (renovationLevel === 1) {
+          ownPizzaLabel = '🍕 BASE (REPARADA L1)';
+          topColor = '#2563EB'; // Royal blue
+          wallColor = '#2563EB'; // Royal blue walls (matched)
+          sideColor = '#1D4ED8'; // Royal blue details
+          peakColor = '#3B82F6';
+        } else if (renovationLevel === 2) {
+          ownPizzaLabel = '🍕 BASE (COMERCIAL L2)';
+          topColor = '#3B82F6'; // Sky blue
+          wallColor = '#3B82F6'; // Sky blue walls (matched)
+          sideColor = '#2563EB'; // Bright blue details
+          peakColor = '#60A5FA';
+        } else {
+          ownPizzaLabel = '⚡ BASE IMPERIO L3 ⚡';
+          topColor = '#06B6D4'; // Brilliant cyan blue
+          wallColor = '#06B6D4'; // Cyan walls (matched)
+          sideColor = '#0891B2'; // Deep cyan details
+          peakColor = '#22D3EE';
+        }
+      }
+
+      push3DBox(OWN_PIZZERIA_X, OWN_PIZZERIA_Y, 0, 48, 48, 30, {
+        top: topColor,
+        front: wallColor,
+        side: sideColor,
+      }, 0.1, ownPizzaLabel);
+
+      push3DPyramid(OWN_PIZZERIA_X, OWN_PIZZERIA_Y, 30, 48, 48, 14, peakColor, peakColor, 0.1);
+    }
 
 
     // CONCESIONARIO (Showroom) next to Pizza shop
@@ -803,6 +911,78 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         avgDepth: avgDVag,
         text: '👻 LADRÓN',
       });
+    });
+
+    // DECORATIVE EMPLOYEES (Active pizza delivery guys flying/driving around)
+    (employees || []).forEach((emp: any) => {
+      const eX = emp.x;
+      const eY = emp.y;
+
+      const shadowPts: Point3D[] = [];
+      const numSegs = 6;
+      for (let i = 0; i < numSegs; i++) {
+        const a = (i / numSegs) * Math.PI * 2;
+        shadowPts.push({
+          x: eX + Math.cos(a) * 4,
+          y: eY + Math.sin(a) * 4,
+          z: 0.1,
+        });
+      }
+      const depthsPrjS = shadowPts.map(proj);
+      const avgDS = depthsPrjS.reduce((sum, p) => sum + p.depth, 0) / shadowPts.length;
+      faces.push({
+        points: shadowPts,
+        color: 'rgba(0,0,0,0.18)',
+        avgDepth: avgDS,
+      });
+
+      // Match player's pizzeria business upgrade colors
+      let empColors = { top: '#2563EB', front: '#2563EB', side: '#1D4ED8' };
+      if (hasOwnPizzeria) {
+        if (renovationLevel === 0) {
+          empColors = { top: '#1E3A8A', front: '#1E293B', side: '#0F172A' };
+        } else if (renovationLevel === 1) {
+          empColors = { top: '#2563EB', front: '#2563EB', side: '#1D4ED8' };
+        } else if (renovationLevel === 2) {
+          empColors = { top: '#3B82F6', front: '#3B82F6', side: '#2563EB' };
+        } else {
+          empColors = { top: '#06B6D4', front: '#06B6D4', side: '#0891B2' };
+        }
+      }
+
+      // Employee 3D model box (smaller size, same color as player's clinic, no name tag)
+      push3DBox(eX, eY, 0, 5, 5, 5, empColors, 0, undefined);
+    });
+
+    // DECORATIVE RIVAL EMPLOYEES (Active original pizzería red deliverers moving around)
+    (rivalDeliverers || []).forEach((dev: any) => {
+      const dX = dev.x;
+      const dY = dev.y;
+
+      const shadowPts: Point3D[] = [];
+      const numSegs = 6;
+      for (let i = 0; i < numSegs; i++) {
+        const a = (i / numSegs) * Math.PI * 2;
+        shadowPts.push({
+          x: dX + Math.cos(a) * 4,
+          y: dY + Math.sin(a) * 4,
+          z: 0.1,
+        });
+      }
+      const depthsPrjS = shadowPts.map(proj);
+      const avgDS = depthsPrjS.reduce((sum, p) => sum + p.depth, 0) / shadowPts.length;
+      faces.push({
+        points: shadowPts,
+        color: 'rgba(0,0,0,0.15)',
+        avgDepth: avgDS,
+      });
+
+      // Original/Rival Delivery Boy 3D model box (mini person dressed in red! matched to rival pizzeria colors, no tag)
+      push3DBox(dX, dY, 0, 5, 5, 5, {
+        top: '#EF4444',   // bright red
+        front: '#EF4444', // red body (matched)
+        side: '#B91C1C',  // dark red trim
+      }, 0, undefined);
     });
 
     // PLAYER MODEL GRAPHICS
@@ -980,12 +1160,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Render simple vector border overlays or text prompts depending on proximity
     // COMPASS ARROW OVERLAY TO PIZZERIA (If no delivery active) OR SEEDED TARGETS (If delivering!)
     const hasActiveOrders = activeOrders.length > 0;
+    const defaultPizzeriaX = 0;
+    const defaultPizzeriaY = hasOwnPizzeria ? 245 : 0;
     const targetX = hasActiveOrders 
       ? (houses.find(h => h.id === activeOrders[0].houseId)?.x || 0) 
-      : PIZZERIA_X;
+      : defaultPizzeriaX;
     const targetY = hasActiveOrders 
       ? (houses.find(h => h.id === activeOrders[0].houseId)?.y || 0) 
-      : PIZZERIA_Y;
+      : defaultPizzeriaY;
 
     // Relative angle to target
     const dx = targetX - playerX;
@@ -1063,8 +1245,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Distance and Compass Direction calculations
   const activeOrder = activeOrders && activeOrders[0];
   const targetHouse = activeOrder ? houses.find(h => h.id === activeOrder.houseId) : null;
-  const targetX = targetHouse ? targetHouse.x : 0; // Pizzeria is at [0,0]
-  const targetY = targetHouse ? targetHouse.y : 0;
+  const defaultPizzaX = 0;
+  const defaultPizzaY = hasOwnPizzeria ? 245 : 0;
+  const targetX = targetHouse ? targetHouse.x : defaultPizzaX;
+  const targetY = targetHouse ? targetHouse.y : defaultPizzaY;
 
   const distDx = targetX - playerX;
   const distDy = targetY - playerY;
@@ -1104,10 +1288,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         <div className="text-left font-sans text-xs">
           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Dirección</p>
           <p className="font-black text-amber-300 truncate max-w-[110px] leading-tight text-xs uppercase font-serif">
-            {targetHouse ? `Casa ${targetHouse.number}` : 'Pizzería'}
+            {targetHouse ? `Casa ${targetHouse.number}` : (hasOwnPizzeria ? 'Base Propia' : 'Pizzería')}
           </p>
           <p className="text-[9px] text-slate-200 font-mono font-medium leading-normal shrink-0">
-            {targetHouse ? 'Destino' : 'Ir a Pizzería'}
+            {targetHouse ? 'Destino' : (hasOwnPizzeria ? 'Ir a Base' : 'Ir a Pizzería')}
           </p>
         </div>
       </div>
@@ -1137,6 +1321,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             <div className="text-left font-sans leading-none">
               <p className="text-sm font-black text-amber-300">
                 {activePrompt === 'pizzeria' && '🍕 Pizzería "El Horno Feliz"'}
+                {activePrompt === 'own_pizzeria' && '⚡ Tu Imperio de Pizza (Base Principal)'}
+                {activePrompt === 'pizzeria_abandonada' && '🏚️ Pizzería Abandonada ($10,000)'}
+                {activePrompt === 'rival_pizzeria_defeated' && '👿 Adquirir Pizzería Rival ($100,000)'}
                 {activePrompt === 'concesionario' && '🚗 Tienda de Vehículos "Motores de la Isla"'}
                 {activePrompt === 'casino' && '🎰 Casino "Isla Fortune"'}
               </p>
@@ -1161,7 +1348,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       )}
 
       {/* Helicopters Escape Warning Floating Overlays */}
-      {currentVehicleId === 'helicoptero' && (
+      {currentVehicleId === 'helicoptero' && !hasOwnPizzeria && (
         <div className="absolute top-2 w-full text-center pointer-events-none z-30">
           <span className="bg-pink-100 text-pink-700 font-black text-[10px] tracking-widest uppercase p-1.5 px-3 rounded-full border border-pink-300 shadow animate-pulse inline-block">
             🚁 Vuelo Libre: ¡Aproxima las esquinas del mapa con el Helicóptero para escapar de la Isla!

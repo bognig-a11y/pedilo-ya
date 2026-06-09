@@ -10,9 +10,11 @@ import {
 } from 'lucide-react';
 import { GameState, House, Order, Obstacle, Vagabond, Upgrades, VehicleId } from './types';
 import { PizzeriaModal } from './components/PizzeriaModal';
+import { OwnPizzeriaModal } from './components/OwnPizzeriaModal';
 import { ConcesionarioModal, VEHICLES_LIST } from './components/ConcesionarioModal';
 import { CasinoModal } from './components/CasinoModal';
 import { UpgradesModal } from './components/UpgradesModal';
+import { PizzeriaCustomizationModal } from './components/PizzeriaCustomizationModal';
 import { GameCanvas } from './components/GameCanvas';
 import { Joystick } from './components/Joystick';
 import { audio } from './utils/audio';
@@ -21,52 +23,58 @@ import { audio } from './utils/audio';
 const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, completedOrdersCount: number): Obstacle[] => {
   const list: Obstacle[] = [];
   
-  // 1. PLACE TREES (scattered randomly on map, avoiding central town)
+  // 1. PLACE TREES (scattered randomly on the map, allowing anywhere)
   for (let i = 0; i < 34; i++) {
     let x = (Math.random() * 800) - 400;
     let y = (Math.random() * 800) - 400;
-    const distCenter = Math.sqrt(x*x + y*y);
-    // Ensure doesn't sit right in center or clip docks
-    if (distCenter > 110) {
-      list.push({
-        id: `tree-${i}-${Date.now()}`,
-        type: 'tree',
-        x,
-        y,
-        size: 10,
-      });
-    }
+    list.push({
+      id: `tree-${i}-${Date.now()}`,
+      type: 'tree',
+      x,
+      y,
+      size: 10,
+    });
   }
 
-  // 2. PLACE MUD PUDDLES
+  // 2. PLACE MUD PUDDLES (scattered randomly, allowing anywhere)
   for (let i = 0; i < 15; i++) {
     let x = (Math.random() * 700) - 350;
     let y = (Math.random() * 700) - 350;
-    const distCenter = Math.sqrt(x*x + y*y);
-    if (distCenter > 90) {
-      list.push({
-        id: `mud-${i}-${Date.now()}`,
-        type: 'mud',
-        x,
-        y,
-        size: 15,
-      });
-    }
+    list.push({
+      id: `mud-${i}-${Date.now()}`,
+      type: 'mud',
+      x,
+      y,
+      size: 15,
+    });
   }
 
   // 3. PLACE TRAFFIC STREET CARS (circulating on the roads!)
-  // Streets coordinates in GameCanvas are at:
-  // Central avenues: X = -15 (axis Y), Y = -15 (axis X)
-  // Outer rings: Y = -250, Y = 240, X = -250, X = 240
   const colors = ['#EF4444', '#3B82F6', '#1E293B', '#F59E0B', '#10B981', '#EC4899'];
-  const streets = [
-    { startX: -440, startY: 0, endX: 440, endY: 0, angle: 0 }, // central horiz
-    { startX: 0, startY: -440, endX: 0, endY: 440, angle: Math.PI / 2 }, // central vert
-    { startX: -241, startY: -241, endX: 240, endY: -241, angle: 0 }, // upper horiz
-    { startX: -241, startY: 245, endX: 240, endY: 245, angle: 0 }, // lower horiz
-    { startX: -241, startY: -241, endX: -241, endY: 245, angle: Math.PI / 2 }, // left vert
-    { startX: 245, startY: -241, endX: 245, endY: 245, angle: Math.PI / 2 }, // right vert
-  ];
+  const STREET_COORDS = [-368, -123, 123, 368];
+  const streets: { startX: number; startY: number; endX: number; endY: number; angle: number }[] = [];
+
+  // Horizontal streets
+  STREET_COORDS.forEach(Y_c => {
+    streets.push({
+      startX: -440,
+      startY: Y_c,
+      endX: 440,
+      endY: Y_c,
+      angle: 0
+    });
+  });
+
+  // Vertical streets
+  STREET_COORDS.forEach(X_c => {
+    streets.push({
+      startX: X_c,
+      startY: -440,
+      endX: X_c,
+      endY: 440,
+      angle: Math.PI / 2
+    });
+  });
 
   streets.forEach((st, idx) => {
     // Place 2 cars per street lane in opposite directions
@@ -75,8 +83,8 @@ const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, 
       const carX = st.startX + (st.endX - st.startX) * t;
       const carY = st.startY + (st.endY - st.startY) * t;
       
-      // speed is slightly slower than default rider
-      const speed = 40 + Math.random() * 25;
+      // speed is increased to satisfy the "autos más rápidos" request
+      const speed = 75 + Math.random() * 40;
 
       list.push({
         id: `car-${idx}-${c}-${Date.now()}`,
@@ -111,14 +119,15 @@ const generateHouses = (): House[] => {
     "#F472B6", "#FB7185", "#38BDF8", "#FCD34D", "#4ADE80"
   ];
 
-  // Map is divided into a 5x5 grid of cells. 
-  // Span from -425 to 425 has total size 850. Cells are 170x170 each.
-  // We represent the grid indices (col, row) where col, row are in [0..4]
+  const colBounds = [-450, -368, -123, 123, 368, 450];
+  const rowBounds = [-450, -368, -123, 123, 368, 450];
+
   const cells: { col: number; row: number }[] = [];
-  for (let r = 0; r < 5; r++) {
-    for (let c = 0; c < 5; c++) {
-      // Exclude center cell (r === 2, c === 2) as it is pizzeria and central highways
+  for (let r = 1; r <= 3; r++) {
+    for (let c = 1; c <= 3; c++) {
+      // Exclude middle square (Row 2, Col 2) and square below middle (Row 3, Col 2) only!
       if (r === 2 && c === 2) continue;
+      if (r === 3 && c === 2) continue;
       cells.push({ col: c, row: r });
     }
   }
@@ -130,50 +139,56 @@ const generateHouses = (): House[] => {
     [shuffledCells[i], shuffledCells[j]] = [shuffledCells[j], shuffledCells[i]];
   }
 
-  // Generate 20 houses. Assign each house to a cell from shuffled list, 
-  // and sample random within that cell's coordinates.
-  // Validate constraints. If it fails, fallback to other cells or retry with softer thresholds.
-  for (let i = 0; i < 20; i++) {
+  // Generate 28 houses (increased from 20 to add more houses)
+  const totalHousesToGenerate = 28;
+  for (let i = 0; i < totalHousesToGenerate; i++) {
     const targetCell = shuffledCells[i % shuffledCells.length];
-    const cellMinX = -425 + targetCell.col * 170;
-    const cellMaxX = cellMinX + 170;
-    const cellMinY = -425 + targetCell.row * 170;
-    const cellMaxY = cellMinY + 170;
+    const cellMinX = colBounds[targetCell.col];
+    const cellMaxX = colBounds[targetCell.col + 1];
+    const cellMinY = rowBounds[targetCell.row];
+    const cellMaxY = rowBounds[targetCell.row + 1];
 
     let attempts = 0;
     let placed = false;
 
     while (attempts < 300) {
       // Pick random coordinate within the assigned cell
-      // add padding of 15% to avoid edge clipping/border issues
+      // add padding of 15 to avoid edge clipping
       const padding = 15;
       const x = Math.floor(Math.random() * (cellMaxX - cellMinX - 2 * padding)) + cellMinX + padding;
       const y = Math.floor(Math.random() * (cellMaxY - cellMinY - 2 * padding)) + cellMinY + padding;
 
-      // 1. Minimum distance to Pizzeria (0, 0)
+      // 1. Minimum distance to original Pizzeria (0, 0)
       const dPizzeria = Math.sqrt(x*x + y*y);
       if (dPizzeria < 110) {
         attempts++;
         continue;
       }
 
-      // 2. Minimum distance to Concesionario (-130, -20)
-      const dDealer = Math.sqrt((x - (-130))**2 + (y - (-20))**2);
+      // 2. Minimum distance to Own Pizzeria (0, 245)
+      const dOwnPizzeria = Math.sqrt(x*x + (y - 245)**2);
+      if (dOwnPizzeria < 110) {
+        attempts++;
+        continue;
+      }
+
+      // 3. Minimum distance to Concesionario (-245, 0)
+      const dDealer = Math.sqrt((x - (-245))**2 + y**2);
       if (dDealer < 65) {
         attempts++;
         continue;
       }
 
-      // 3. Minimum distance to Casino (130, -20)
-      const dCasino = Math.sqrt((x - 130)**2 + (y - (-20))**2);
+      // 4. Minimum distance to Casino (245, 0)
+      const dCasino = Math.sqrt((x - 245)**2 + y**2);
       if (dCasino < 65) {
         attempts++;
         continue;
       }
 
-      // 4. Check distance to already placed houses -> must be >= 90 units for spread out design
+      // 5. Check distance to already placed houses
       let tooClose = false;
-      const minHouseDist = attempts > 200 ? 55 : 95; // scale down min spacing under high search friction
+      const minHouseDist = attempts > 200 ? 30 : 50;
       for (const h of list) {
         const d = Math.sqrt((x - h.x)**2 + (y - h.y)**2);
         if (d < minHouseDist) {
@@ -198,36 +213,36 @@ const generateHouses = (): House[] => {
       attempts++;
     }
 
-    // High stress fallback if cell is completely blocked, search across other vacant regions
+    // High stress fallback if cell is completely blocked
     if (!placed) {
       let fallbackAttempts = 0;
       while (fallbackAttempts < 100) {
-        const x = Math.floor(Math.random() * 800) - 400;
-        const y = Math.floor(Math.random() * 800) - 400;
-        const distCenter = Math.sqrt(x*x + y*y);
-        const distDealer = Math.sqrt((x - (-130))**2 + (y - (-20))**2);
-        const distCasino = Math.sqrt((x - 130)**2 + (y - (-20))**2);
+        const randomCell = cells[Math.floor(Math.random() * cells.length)];
+        const minX = colBounds[randomCell.col] + 15;
+        const maxX = colBounds[randomCell.col + 1] - 15;
+        const minY = rowBounds[randomCell.row] + 15;
+        const maxY = rowBounds[randomCell.row + 1] - 15;
+        const x = Math.floor(Math.random() * (maxX - minX)) + minX;
+        const y = Math.floor(Math.random() * (maxY - minY)) + minY;
 
-        if (distCenter > 110 && distDealer > 65 && distCasino > 65) {
-          let tooClose = false;
-          for (const h of list) {
-            if (Math.sqrt((x - h.x)**2 + (y - h.y)**2) < 55) {
-              tooClose = true;
-              break;
-            }
-          }
-          if (!tooClose) {
-            list.push({
-              id: i + 1,
-              x,
-              y,
-              name: houseNames[i % houseNames.length],
-              color: colors[i % colors.length],
-              number: (i * 7 + 15).toString(),
-              style: i,
-            });
+        let tooClose = false;
+        for (const h of list) {
+          if (Math.sqrt((x - h.x)**2 + (y - h.y)**2) < 30) {
+            tooClose = true;
             break;
           }
+        }
+        if (!tooClose) {
+          list.push({
+            id: i + 1,
+            x,
+            y,
+            name: houseNames[i % houseNames.length],
+            color: colors[i % colors.length],
+            number: (i * 7 + 15).toString(),
+            style: i,
+          });
+          break;
         }
         fallbackAttempts++;
       }
@@ -311,6 +326,35 @@ export default function App() {
   // Helipads near exit interactive popup
   const [isEscapeAsking, setIsEscapeAsking] = useState(false);
 
+  // Business late-game expansion states
+  const [hasOwnPizzeria, setHasOwnPizzeria] = useState(false);
+  const [pizzeriaName, setPizzeriaName] = useState('Base Propia');
+  const [pizzeriaColor, setPizzeriaColor] = useState('#10B981'); // Emerald green default
+  const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
+  const [renovationLevel, setRenovationLevel] = useState(0); // 0, 1, 2, 3
+  const [playerMarketShare, setPlayerMarketShare] = useState(20);
+  const [businessDaysHeld, setBusinessDaysHeld] = useState(0);
+  const [rivalPassiveRate, setRivalPassiveRate] = useState(2);
+  const [employeeLevel, setEmployeeLevel] = useState(0); // 0-5
+  const [isRivalDefeated, setIsRivalDefeated] = useState(false);
+  const [hasGlobalized, setHasGlobalized] = useState(false);
+  const [passiveTimer, setPassiveTimer] = useState(0);
+
+  // Simulation employees state
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [rivalDeliverers, setRivalDeliverers] = useState<any[]>([]);
+
+  // Password terminal cheat states
+  const [isCheatOpen, setIsCheatOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+
+  // Modals system triggers
+  const [isBuyPizzeriaOpen, setIsBuyPizzeriaOpen] = useState(false);
+  const [isOwnPizzeriaOpen, setIsOwnPizzeriaOpen] = useState(false);
+  const [isBuyRivalOpen, setIsBuyRivalOpen] = useState(false);
+  const [isRivalDecisionOpen, setIsRivalDecisionOpen] = useState(false);
+  const [rivalPulse, setRivalPulse] = useState(false);
+
   // Virtual controller directions state
   const [virtualDirection, setVirtualDirection] = useState({ x: 0, y: 0 });
 
@@ -339,7 +383,17 @@ export default function App() {
     isDealerOpen,
     isCasinoOpen,
     isUpgradesOpen,
+    isBuyPizzeriaOpen,
+    isOwnPizzeriaOpen,
+    isBuyRivalOpen,
+    isRivalDecisionOpen,
+    isCheatOpen,
     houses,
+    hasOwnPizzeria,
+    playerMarketShare,
+    hasGlobalized,
+    isRivalDefeated,
+    isCustomizationOpen,
   };
 
   // Initialize and regenerate 3 orders
@@ -355,8 +409,10 @@ export default function App() {
       const hIdx = Math.floor(Math.random() * housePool.length);
       const targetHouse = housePool.splice(hIdx, 1)[0];
 
-      // Calculate absolute distance (from pizzeria center X:0 Y:0 to house)
-      const dist = Math.sqrt(targetHouse.x ** 2 + targetHouse.y ** 2);
+      // Calculate absolute distance (from pizzeria center X:0 Y:0 to house, or custom pizzeria base [0, 245])
+      const refX = 0;
+      const refY = hasOwnPizzeria ? 245 : 0;
+      const dist = Math.sqrt((targetHouse.x - refX) ** 2 + (targetHouse.y - refY) ** 2);
       
       // Calculate realistic travel duration base: distance / speed
       const baseTripDuration = dist / playerVehicleSpeed;
@@ -429,18 +485,66 @@ export default function App() {
 
         const state = physicsStateRef.current;
 
-        // Find if near any shop and trigger modal
-        const distPizza = Math.sqrt((curX - 0) ** 2 + (curY - 0) ** 2);
-        const distDealer = Math.sqrt((curX - (-130)) ** 2 + (curY - (-20)) ** 2);
-        const distCasino = Math.sqrt((curX - 130) ** 2 + (curY - (-20)) ** 2);
-
-        if (distPizza < 50 && !state.isPizzeriaOpen) {
-          setIsPizzeriaOpen(true);
+        // Check secret password cheat in bottom-right corner (around 440, 440)
+        const distCornerBR = Math.sqrt((curX - 440) ** 2 + (curY - 440) ** 2);
+        if (distCornerBR < 55 && !state.isCheatOpen) {
+          setIsCheatOpen(true);
+          setIsPizzeriaOpen(false);
           setIsDealerOpen(false);
           setIsCasinoOpen(false);
           setIsUpgradesOpen(false);
+          setIsBuyPizzeriaOpen(false);
+          setIsOwnPizzeriaOpen(false);
+          setIsBuyRivalOpen(false);
+          setIsRivalDecisionOpen(false);
           audio.playUpgrade();
-        } else if (distDealer < 50 && !state.isDealerOpen) {
+          return;
+        }
+
+        const distPizza = Math.sqrt((curX - 0) ** 2 + (curY - 0) ** 2);
+        const distDealer = Math.sqrt((curX - (-245)) ** 2 + (curY - 0) ** 2);
+        const distCasino = Math.sqrt((curX - 245) ** 2 + (curY - 0) ** 2);
+        const distOwnPizza = Math.sqrt((curX - 0) ** 2 + (curY - 245) ** 2);
+
+        if (!state.hasOwnPizzeria) {
+          if (distPizza < 50 && !state.isPizzeriaOpen) {
+            setIsPizzeriaOpen(true);
+            setIsDealerOpen(false);
+            setIsCasinoOpen(false);
+            setIsUpgradesOpen(false);
+            audio.playUpgrade();
+          } else if (distOwnPizza < 50 && !state.isBuyPizzeriaOpen) {
+            if (state.currentVehicleId === 'helicoptero') {
+              setIsBuyPizzeriaOpen(true);
+              setIsDealerOpen(false);
+              setIsCasinoOpen(false);
+              setIsUpgradesOpen(false);
+              audio.playUpgrade();
+            } else {
+              alertBanner("⚠️ Solo puedes adquirir esta base propia si tienes el Helicóptero principal de la concesionaria.");
+            }
+          }
+        } else {
+          if (distOwnPizza < 50 && !state.isOwnPizzeriaOpen) {
+            setIsOwnPizzeriaOpen(true);
+            setIsDealerOpen(false);
+            setIsCasinoOpen(false);
+            setIsUpgradesOpen(false);
+            audio.playUpgrade();
+          } else if (distPizza < 50 && !state.isBuyRivalOpen && !hasGlobalized) {
+            if (playerMarketShare >= 99.8) {
+              setIsBuyRivalOpen(true);
+              setIsDealerOpen(false);
+              setIsCasinoOpen(false);
+              setIsUpgradesOpen(false);
+              audio.playUpgrade();
+            } else {
+              alertBanner(`⚠️ No puedes adquirir la pizzería rival todavía. Logra el 100% de la participación del mercado primero (Rival tiene ${(100 - playerMarketShare).toFixed(1)}%).`);
+            }
+          }
+        }
+
+        if (distDealer < 50 && !state.isDealerOpen) {
           setIsDealerOpen(true);
           setIsPizzeriaOpen(false);
           setIsCasinoOpen(false);
@@ -474,7 +578,7 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [isEscapeAsking]);
 
 
   // KINEMATICS & OBSTACLE MOTION ticking loop (runs at requestAnimationFrame)
@@ -532,8 +636,20 @@ export default function App() {
         moveSpeed *= mudSlowMultiplier;
       }
 
-      // Zero speed when fully stunned
-      if (state.stunTime > 0) {
+      // Zero speed when fully stunned or any menu layout is active
+      const isAnyModalActive = 
+        state.isPizzeriaOpen || 
+        state.isDealerOpen || 
+        state.isCasinoOpen || 
+        state.isUpgradesOpen ||
+        state.isBuyPizzeriaOpen ||
+        state.isOwnPizzeriaOpen ||
+        state.isBuyRivalOpen ||
+        state.isRivalDecisionOpen ||
+        state.isCustomizationOpen ||
+        state.isCheatOpen;
+
+      if (state.stunTime > 0 || isAnyModalActive) {
         moveSpeed = 0;
       }
 
@@ -561,7 +677,7 @@ export default function App() {
         // 4. COLLISION CHECKS WITH BUILDINGS & SOLID OBJECTS (Helicopter ignores ground collisions!)
         if (state.currentVehicleId !== 'helicoptero') {
           // A. Central Shops
-          // Pizzeria (0,0) radius 24
+          // Pizzeria (0, 0) radius 24
           const dPiz = Math.sqrt(nextX**2 + nextY**2);
           if (dPiz < 25) {
             const curDist = Math.sqrt(playerXRef.current**2 + playerYRef.current**2);
@@ -570,19 +686,28 @@ export default function App() {
               nextY = playerYRef.current;
             }
           }
-          // Concesionario (-130, -20) radius 22
-          const dDeal = Math.sqrt((nextX - (-130))**2 + (nextY - (-20))**2);
+          // Own Pizzeria base (0, 245) radius 24
+          const dOwnPiz = Math.sqrt(nextX**2 + (nextY - 245)**2);
+          if (dOwnPiz < 25) {
+            const curDist = Math.sqrt(playerXRef.current**2 + (playerYRef.current - 245)**2);
+            if (dOwnPiz < curDist) {
+              nextX = playerXRef.current;
+              nextY = playerYRef.current;
+            }
+          }
+          // Concesionario (-245, 0) radius 22
+          const dDeal = Math.sqrt((nextX - (-245))**2 + nextY**2);
           if (dDeal < 23) {
-            const curDist = Math.sqrt((playerXRef.current - (-130))**2 + (playerYRef.current - (-20))**2);
+            const curDist = Math.sqrt((playerXRef.current - (-245))**2 + playerYRef.current**2);
             if (dDeal < curDist) {
               nextX = playerXRef.current;
               nextY = playerYRef.current;
             }
           }
-          // Casino (130, -20) radius 22
-          const dCas = Math.sqrt((nextX - 130)**2 + (nextY - (-20))**2);
+          // Casino (245, 0) radius 22
+          const dCas = Math.sqrt((nextX - 245)**2 + nextY**2);
           if (dCas < 23) {
-            const curDist = Math.sqrt((playerXRef.current - 130)**2 + (playerYRef.current - (-20))**2);
+            const curDist = Math.sqrt((playerXRef.current - 245)**2 + playerYRef.current**2);
             if (dCas < curDist) {
               nextX = playerXRef.current;
               nextY = playerYRef.current;
@@ -749,14 +874,50 @@ export default function App() {
             if (isTruck) {
               finalPayout *= 2;
             }
+
+            // Apply 50% penalty if own pizzeria Nivel 0
+            const isDilapidated = hasOwnPizzeria && renovationLevel === 0;
+            if (isDilapidated) {
+              finalPayout = Math.round(finalPayout * 0.5);
+            }
             
             setMoney(prev => prev + finalPayout);
             setCompletedOrdersCount(prev => prev + 1);
 
-            if (isTruck) {
+            // Trigger customer alert messages
+            if (isDilapidated) {
+              alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (Deteriorada: -50% castigo 🏚️)`);
+            } else if (isTruck) {
               alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (¡DUPLICADO x2 por Camión! 🚚)`);
             } else {
               alertBanner(`🍕 ¡ENTREGA COMPLETADA! Casa ${destHouse.number}. Cobraste $${finalPayout} (Bono: +${state.upgrades.ganancia * 12}%)`);
+            }
+
+            // Support market share growth
+            if (hasOwnPizzeria && !isRivalDefeated) {
+              let gain = 0.2;
+              if (renovationLevel >= 2) {
+                gain = 1.0;
+              }
+              setPlayerMarketShare(prev => {
+                let nextShare = prev + gain;
+                if (renovationLevel >= 2) {
+                  nextShare = Math.round(nextShare);
+                }
+                const finalShare = Math.min(100, nextShare);
+                if (finalShare >= 99.8) {
+                  setIsRivalDefeated(true);
+                  alertBanner("🏆 ¡COMPETIDOR VENCIDO! 100% de Competencia logrado. Compra la pizzería rival en el centro ($100.000).");
+                  audio.playCasinoWin();
+                  return 100;
+                } else {
+                  // Alert the user about their market share gain too
+                  setTimeout(() => {
+                    alertBanner(`📈 Cuota de mercado alcanzada: ${finalShare.toFixed(renovationLevel >= 2 ? 0 : 1)}% (+${gain}%)`);
+                  }, 2000);
+                }
+                return finalShare;
+              });
             }
 
             // Shift Pizza Queue list
@@ -791,7 +952,8 @@ export default function App() {
       // 1. Day Clock tick
       if (dayTimeLeft <= 1) {
         // Increment Day (Day transitions from `day` to `day + 1`)
-        const rentDue = day % 5 === 0 ? Math.floor(day / 5) * 500 : 0;
+        // Rent Due checks: Only if they DO NOT own their pizzeria!
+        const rentDue = (!hasOwnPizzeria && day % 3 === 0) ? Math.floor(day / 3) * 500 : 0;
 
         if (rentDue > 0) {
           if (money < rentDue) {
@@ -803,8 +965,8 @@ export default function App() {
             // Deduct rent safely
             setMoney(cash => cash - rentDue);
             audio.playRentPay();
-            setRentPaymentNotice({ amount: rentDue, nextDay: day + 5 });
-            alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 5 días.`);
+            setRentPaymentNotice({ amount: rentDue, nextDay: day + 3 });
+            alertBanner(`🏢 PAGASTE LA RENTA: -$${rentDue}. Siguiente pago en 3 días.`);
           }
         }
 
@@ -812,9 +974,60 @@ export default function App() {
         setDay(d => d + 1);
         setDayTimeLeft(60);
 
-        // Rent warning calculation: Day 4, 9, 14, 19...
+        // Tycoon rival growth: Increases every day / minute of holding!
+        if (hasOwnPizzeria && !isRivalDefeated && !hasGlobalized) {
+          const nextDaysHeld = businessDaysHeld + 1;
+          setBusinessDaysHeld(nextDaysHeld);
+
+          const shareLoss = rivalPassiveRate;
+          setPlayerMarketShare(prev => {
+            const nextShare = Math.max(0, prev - shareLoss);
+            if (nextShare <= 0) {
+              // Game Over! Market share hit 0% (rival reaches 100%)
+              audio.playFail();
+              setGameState('gameover');
+              return 0;
+            }
+
+            // Warnings
+            const rivalShareGauge = 100 - nextShare;
+            if (rivalShareGauge >= 99) {
+              alertBanner("🚨 ¡La pizzería rival está a punto de monopolizar la isla! (99% Competencia)");
+              audio.playAlert();
+            } else if (rivalShareGauge >= 95) {
+              alertBanner("⚠️ ¡Última oportunidad! Estás a punto de perder todo el mercado. (95% Competencia)");
+              audio.playAlert();
+            } else if (rivalShareGauge >= 90) {
+              alertBanner("❗ ¡Alerta competitiva! La competencia domina la isla. (90% Competencia)");
+              audio.playAlert();
+            }
+
+            setRivalPulse(true);
+            setTimeout(() => setRivalPulse(false), 800);
+
+            return nextShare;
+          });
+
+          // Rival permanent growth bonus increase: Every 3 days (+2% additional growth rate)
+          if (nextDaysHeld > 0 && nextDaysHeld % 3 === 0) {
+            const addedGrowth = 2;
+            const updatedRate = rivalPassiveRate + addedGrowth;
+            setRivalPassiveRate(updatedRate);
+
+            setTimeout(() => {
+              setPlayerMarketShare(currentShare => {
+                const totalRivalShare = 100 - currentShare;
+                alertBanner(`😈 ¡COMPETIDOR FORTALECIDO! El rival obtiene +${addedGrowth}% de crecimiento permanente. Crece +${updatedRate}% por minuto (Rival total: ${totalRivalShare}%).`);
+                audio.playAlert();
+                return currentShare;
+              });
+            }, 100);
+          }
+        }
+
+        // Rent warning calculation: Day 2, 5, 8...
         const nextDay = day + 1;
-        if (nextDay % 5 === 4) {
+        if (!hasOwnPizzeria && nextDay % 3 === 2) {
           setRentWarning(true);
           audio.playAlert();
           setTimeout(() => {
@@ -827,49 +1040,288 @@ export default function App() {
 
       // 2. Active Deliveries clocks tick
       if (activeOrders.length > 0) {
+        let orderExpired = false;
+        let expiredHouseId = -1;
+
         setActiveOrders(prev => {
           if (prev.length === 0) return prev;
+          if (prev[0].timeLeft <= 1) {
+            orderExpired = true;
+            expiredHouseId = prev[0].houseId;
+            return prev.slice(1); // remove expired order immediately
+          } else {
+            return prev.map((ord, idx) => {
+              if (idx === 0) {
+                return { ...ord, timeLeft: ord.timeLeft - 1 };
+              }
+              return ord;
+            });
+          }
+        });
 
-          // Decrement elapsed timeLeft ONLY of the FIRST delivery!
-          const queue = prev.map((ord, idx) => {
-            if (idx === 0) {
-              return { ...ord, timeLeft: ord.timeLeft - 1 };
+        if (orderExpired) {
+          audio.playFail();
+          setFailures(f => {
+            const nextFailures = f + 1;
+            if (nextFailures >= 3) {
+              setGameState('gameover');
             }
-            return ord;
+            return nextFailures;
           });
 
-          // Check if primary pizza ran out of time
-          if (queue[0].timeLeft <= 0) {
-            audio.playFail();
-            // Increment failures counter
-            setFailures(f => {
-              const nextFailures = f + 1;
-              if (nextFailures >= 3) {
-                setGameState('gameover');
-              }
-              return nextFailures;
-            });
+          const targetHouse = houses.find(h => h.id === expiredHouseId);
+          alertBanner(`⏰ ¡SE ACABÓ EL TIEMPO! Fallaste la entrega en Casa ${targetHouse?.number || ''}`);
 
-            // Alert failed
-            const targetHouse = houses.find(h => h.id === queue[0].houseId);
-            alertBanner(`⏰ ¡SE ACABO EL TIEMPO! Fallaste la entrega en Casa ${targetHouse?.number || ''}`);
-
-            queue.shift(); // remove failed pizza
-
-            // If no orders left, clear out obstacles
-            if (queue.length === 0) {
-              setObstacles([]);
-              setVagabonds([]);
-            }
-          }
-
-          return queue;
-        });
+          // Clear out any dynamic map clutter since the active run is ended
+          setObstacles([]);
+          setVagabonds([]);
+        }
       }
     }, 1000);
 
     return () => clearTimeout(timer);
   }, [gameState, day, dayTimeLeft, activeOrders, money, houses]);
+
+
+  // Tycoon Passive Income and Competition Progression (1-second tick-rate engine)
+  useEffect(() => {
+    if (gameState !== 'playing' || !hasOwnPizzeria) return;
+
+    const interval = setInterval(() => {
+      setPassiveTimer(prev => {
+        const nextSec = prev + 1;
+        
+        // 1. Regular 30s check for Level 3 (Negocio Operativo) & Employee levels 1 to 4
+        if (nextSec % 30 === 0) {
+          // Level 3 renovation bonuses
+          if (renovationLevel >= 3) {
+            // Level 3: Every 30s: +2% competition, +$200 income
+            setMoney(m => m + 200);
+            
+            if (!isRivalDefeated) {
+              setPlayerMarketShare(pts => {
+                const nextShare = Math.min(100, pts + 2);
+                if (nextShare >= 99.8) {
+                  setIsRivalDefeated(true);
+                  alertBanner("🏆 ¡COMPETIDOR VENCIDO! 100% de Competencia logrado. Compra la pizzería rival ($100.000).");
+                  audio.playCasinoWin();
+                  return 100;
+                }
+                return nextShare;
+              });
+            }
+            alertBanner("🏢 INCOME PASIVO: +$200 y +2% de cuota por Negocio Operativo.");
+            // Silent and discrete notification (no playRentPay audio played!)
+          }
+
+          // Employees level 1 to 4 (Novato up to Experto)
+          if (employeeLevel > 0 && employeeLevel <= 4) {
+            let moneyBonus = 0;
+            let shareBonus = 0;
+            let empName = "";
+
+            if (employeeLevel === 1) {
+              moneyBonus = 300;
+              shareBonus = 3;
+              empName = "Novato";
+            } else if (employeeLevel === 2) {
+              moneyBonus = 400;
+              shareBonus = 4;
+              empName = "Experimentado";
+            } else if (employeeLevel === 3) {
+              moneyBonus = 500;
+              shareBonus = 5;
+              empName = "Profesional";
+            } else if (employeeLevel === 4) {
+              moneyBonus = 1000;
+              shareBonus = 5;
+              empName = "Experto";
+            }
+
+            if (moneyBonus > 0) {
+              setMoney(m => m + moneyBonus);
+              if (!isRivalDefeated) {
+                setPlayerMarketShare(pts => {
+                  const nextShare = Math.min(100, pts + shareBonus);
+                  if (nextShare >= 99.8) {
+                    setIsRivalDefeated(true);
+                    alertBanner("🏆 ¡COMPETIDOR VENCIDO! 100% de Competencia logrado. Compra la pizzería rival ($100.000).");
+                    audio.playCasinoWin();
+                    return 100;
+                  }
+                  return nextShare;
+                });
+              }
+              // Display a combined notification so the player feels the progression!
+              setTimeout(() => {
+                alertBanner(`🛵 EMPLEADO [${empName}]: Generó +$${moneyBonus} y +${shareBonus}% de cuota de mercado.`);
+              }, 1200);
+            }
+          }
+        }
+
+        // 2. Specialized 15s check for Nivel 5 (Experto+)
+        if (nextSec % 15 === 0) {
+          if (employeeLevel === 5) {
+            const moneyBonus = 1000;
+            const shareBonus = 5;
+
+            setMoney(m => m + moneyBonus);
+            if (!isRivalDefeated) {
+              setPlayerMarketShare(pts => {
+                const nextShare = Math.min(100, pts + shareBonus);
+                if (nextShare >= 99.8) {
+                  setIsRivalDefeated(true);
+                  alertBanner("🏆 ¡COMPETIDOR VENCIDO! 100% de Competencia logrado. Compra la pizzería rival ($100.000).");
+                  audio.playCasinoWin();
+                  return 100;
+                }
+                return nextShare;
+              });
+            }
+            alertBanner(`🛸 EMPLEADO [Experto+]: Generó +$${moneyBonus} y +${shareBonus}% (Frecuencia: ¡Cada 15s! ⚡)`);
+          }
+        }
+
+        return nextSec;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [gameState, hasOwnPizzeria, renovationLevel, employeeLevel, isRivalDefeated]);
+
+
+  // Synchronous visual employees simulation movement loop
+  useEffect(() => {
+    if (gameState !== 'playing' || !hasOwnPizzeria || employeeLevel === 0) {
+      setEmployees([]);
+      return;
+    }
+
+    const count = Math.min(5, employeeLevel);
+    const emojis = ['🛵', '🚗', '🚲', '🚀', '🛸'];
+    
+    let initialList = Array.from({ length: count }, (_, idx) => {
+      return {
+        id: idx,
+        x: 0,
+        y: 245,
+        targetX: 0 + (Math.random() * 200 - 100),
+        targetY: 245 + (Math.random() * 200 - 100),
+        speed: 20 + idx * 5,
+        emoji: emojis[idx],
+        mode: 'heading_to_delivery'
+      };
+    });
+
+    setEmployees(initialList);
+
+    const interval = setInterval(() => {
+      setEmployees(prev => {
+        if (prev.length === 0) return initialList;
+        return prev.map(emp => {
+          let dx = emp.targetX - emp.x;
+          let dy = emp.targetY - emp.y;
+          let d = Math.sqrt(dx * dx + dy * dy);
+
+          if (d < 15) {
+            if (emp.mode === 'heading_to_delivery') {
+              return {
+                ...emp,
+                targetX: 0,
+                targetY: 245,
+                mode: 'returning_to_base'
+              };
+            } else {
+              const targetH = houses[Math.floor(Math.random() * houses.length)];
+              return {
+                ...emp,
+                targetX: targetH.x,
+                targetY: targetH.y,
+                mode: 'heading_to_delivery'
+              };
+            }
+          } else {
+            const step = (emp.speed * 0.15); // scaled step
+            const moveX = (dx / d) * step;
+            const moveY = (dy / d) * step;
+            return {
+              ...emp,
+              x: emp.x + moveX,
+              y: emp.y + moveY
+            };
+          }
+        });
+      });
+    }, 150);
+
+    return () => clearInterval(interval);
+  }, [gameState, hasOwnPizzeria, employeeLevel, houses]);
+
+  // Synchronous visual original/rival pizzería decorative red deliverers movement loop (0, 0)
+  useEffect(() => {
+    if (gameState !== 'playing' || !hasOwnPizzeria) {
+      setRivalDeliverers([]);
+      return;
+    }
+
+    const count = 4;
+    let initialList = Array.from({ length: count }, (_, idx) => {
+      const targetH = houses[Math.floor(Math.random() * houses.length)];
+      return {
+        id: idx,
+        x: 0,
+        y: 0,
+        targetX: targetH.x,
+        targetY: targetH.y,
+        speed: 20 + idx * 5,
+        mode: 'heading_to_delivery'
+      };
+    });
+
+    setRivalDeliverers(initialList);
+
+    const interval = setInterval(() => {
+      setRivalDeliverers(prev => {
+        if (prev.length === 0) return initialList;
+        return prev.map(dev => {
+          let dx = dev.targetX - dev.x;
+          let dy = dev.targetY - dev.y;
+          let d = Math.sqrt(dx * dx + dy * dy);
+
+          if (d < 15) {
+            if (dev.mode === 'heading_to_delivery') {
+              return {
+                ...dev,
+                targetX: 0,
+                targetY: 0,
+                mode: 'returning_to_base'
+              };
+            } else {
+              const targetH = houses[Math.floor(Math.random() * houses.length)];
+              return {
+                ...dev,
+                targetX: targetH.x,
+                targetY: targetH.y,
+                mode: 'heading_to_delivery'
+              };
+            }
+          } else {
+            const step = (dev.speed * 0.15); // scaled step
+            const moveX = (dx / d) * step;
+            const moveY = (dy / d) * step;
+            return {
+              ...dev,
+              x: dev.x + moveX,
+              y: dev.y + moveY
+            };
+          }
+        });
+      });
+    }, 150);
+
+    return () => clearInterval(interval);
+  }, [gameState, hasOwnPizzeria, houses]);
 
 
   // Helper alert notifications message
@@ -888,6 +1340,11 @@ export default function App() {
     setIsDealerOpen(false);
     setIsCasinoOpen(false);
     setIsUpgradesOpen(false);
+    setIsBuyPizzeriaOpen(false);
+    setIsOwnPizzeriaOpen(false);
+    setIsBuyRivalOpen(false);
+    setIsRivalDecisionOpen(false);
+    setIsCheatOpen(false);
 
     // Reset pressed keys ref and state to avoid sticky keys
     keysPressedRef.current = {};
@@ -990,6 +1447,25 @@ export default function App() {
     audio.playUpgrade();
   };
 
+  // TYCOON RENOVATION BUY HANDLER
+  const handleUpgradeRenovation = (nextLvl: number, cost: number) => {
+    if (money < cost) return;
+    setMoney(prev => prev - cost);
+    setRenovationLevel(nextLvl);
+    audio.playUpgrade();
+    alertBanner(`🛠️ ¡INFRAESTRUCTURA MEJORADA! Has invertido $${cost}. Pizzería alcanzó Nivel ${nextLvl}.`);
+  };
+
+  // TYCOON EMPLOYEE RECRUIT HANDLER
+  const handleUpgradeEmployee = (nextLvl: number, cost: number) => {
+    if (money < cost) return;
+    setMoney(prev => prev - cost);
+    setEmployeeLevel(nextLvl);
+    audio.playUpgrade();
+    const ranks = ["Ninguno", "Novato", "Experimentado", "Profesional", "Experto", "Experto+"];
+    alertBanner(`🛵 ¡RECLUTAMIENTO EFECTIVO! Rango alcanzado: ${ranks[nextLvl]} (Inversión: $${cost}).`);
+  };
+
   // CASINO REWARDS INJECTIONS
   const handleCasinoAddMoney = (amount: number) => {
     setMoney(prev => Math.max(0, prev + amount));
@@ -1038,16 +1514,34 @@ export default function App() {
     setIsEscapeAsking(false);
     setStunTime(0);
     setSlowTime(0);
+
+    // Business tycoon expansions resets
+    setHasOwnPizzeria(false);
+    setRenovationLevel(0);
+    setPlayerMarketShare(20);
+    setBusinessDaysHeld(0);
+    setRivalPassiveRate(2);
+    setEmployeeLevel(0);
+    setIsRivalDefeated(false);
+    setHasGlobalized(false);
+    setPassiveTimer(0);
+    setEmployees([]);
+    setIsBuyPizzeriaOpen(false);
+    setIsOwnPizzeriaOpen(false);
+    setIsBuyRivalOpen(false);
+    setIsRivalDecisionOpen(false);
+    setIsCheatOpen(false);
+
     generatePizzeriaOrders(VEHICLES_LIST[0].speed);
   };
 
   // Rent details
-  const nextRentDay = Math.ceil(day / 5) * 5;
-  const nextRentAmount = Math.floor(nextRentDay / 5) * 500;
+  const nextRentDay = Math.ceil(day / 3) * 3;
+  const nextRentAmount = Math.floor(nextRentDay / 3) * 500;
   const daysUntilNextRent = nextRentDay - day;
 
   return (
-    <div id="pedilo-ya-root-app" className="w-screen h-screen bg-sky-200 flex flex-col justify-between overflow-hidden relative select-none selection:bg-amber-100 font-sans">
+    <div id="pedilo-ya-root-app" className={`w-full ${gameState === 'playing' ? 'h-screen overflow-hidden' : 'min-h-screen overflow-y-auto'} bg-sky-200 flex flex-col justify-between relative select-none selection:bg-amber-100 font-sans`}>
       
       {/* 1. TOP NAVBAR / HUD */}
       <header className="bg-white/95 backdrop-blur-md border-b-4 border-yellow-400 p-4 shrink-0 flex items-center justify-between shadow-md z-25">
@@ -1084,12 +1578,14 @@ export default function App() {
             </div>
 
             {/* Days Box */}
-            <div className="bg-orange-50 border-2 border-orange-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold" title={`Próximo pago de renta: $${nextRentAmount}`}>
+            <div className="bg-orange-50 border-2 border-orange-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold" title={hasOwnPizzeria ? '¡Eres dueño de la pizzería!' : `Próximo pago de renta: $${nextRentAmount}`}>
               <Calendar className="w-5 h-5 text-orange-550 font-bold" />
               <div>
                 <p className="text-[9px] uppercase text-orange-600 font-extrabold tracking-wider leading-none">Día {day}</p>
                 <p className="font-mono text-xs font-black leading-none mt-0.5 text-orange-500">
-                  {daysUntilNextRent === 0 ? (
+                  {hasOwnPizzeria ? (
+                    <span className="text-emerald-600 font-sans font-bold">🏢 Negocio Propio (Renta $0)</span>
+                  ) : daysUntilNextRent === 0 ? (
                     <span className="text-red-600 animate-pulse">¡HOY Renta: ${nextRentAmount} (en {60 - dayTimeLeft}s)!</span>
                   ) : (
                     <span>Renta: ${nextRentAmount} en {daysUntilNextRent}d ({60 - dayTimeLeft}s)</span>
@@ -1141,13 +1637,42 @@ export default function App() {
         <section className="bg-white border-b-2 border-yellow-400 p-2 text-[10px] flex justify-around items-center md:hidden font-sans font-bold text-gray-700">
           <span>💵 <strong className="text-emerald-600 font-black">${money}</strong></span>
           <span>{currentVehicle.emoji} {currentVehicle.name}</span>
-          <span>📅 Día {day} ({daysUntilNextRent === 0 ? `HOY Renta: $${nextRentAmount}` : `Renta: $${nextRentAmount} en ${daysUntilNextRent}d`})</span>
+          <span>📅 Día {day} ({hasOwnPizzeria ? '🏢 Imperio' : (daysUntilNextRent === 0 ? `HOY Renta: $${nextRentAmount}` : `Renta: $${nextRentAmount} en ${daysUntilNextRent}d`)})</span>
           <span className="text-pink-650">⚠️ Fallos: {failures}/3</span>
         </section>
       )}
 
       {/* 2. DYNAMIC GAME AREA PANEL */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 flex flex-col justify-center relative overflow-hidden">
+        
+        {/* COMPARTIDA DE COMPETENCIA BAR */}
+        {hasOwnPizzeria && (
+          <div className={`mb-3 w-full bg-slate-900/95 border-2 border-amber-500/80 p-3 rounded-2xl flex flex-col gap-1.5 shadow-xl select-none z-10 transition-all duration-300 relative ${rivalPulse ? 'scale-[1.01] border-red-500' : ''}`}>
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1.5 font-sans font-black uppercase text-emerald-400">
+                <span>🟢 TU MARCA: <strong>{playerMarketShare.toFixed(playerMarketShare % 1 === 0 ? 0 : 1)}%</strong></span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800">
+                {isRivalDefeated ? '👑 ¡MERCADO CONQUISTADO! (RIVAL ELIMINADO)' : `COMPETENCIA (PASIVA RIVAL: +${rivalPassiveRate}%/MIN)`}
+              </span>
+              <div className="flex items-center gap-1.5 font-sans font-black uppercase text-red-500">
+                <span>🔴 RIVAL: <strong>{(100 - playerMarketShare).toFixed((100 - playerMarketShare) % 1 === 0 ? 0 : 1)}%</strong></span>
+              </div>
+            </div>
+            
+            {/* 100% split visual progress bar */}
+            <div className="w-full h-3.5 bg-red-700 rounded-full overflow-hidden flex shadow-inner border border-slate-950">
+              <div 
+                className="bg-gradient-to-r from-emerald-500 to-amber-500 h-full transition-all duration-350 ease-out shrink-0"
+                style={{ width: `${playerMarketShare}%` }}
+              />
+              <div 
+                className="bg-red-600 h-full transition-all duration-350 ease-out shrink-0"
+                style={{ width: `${100 - playerMarketShare}%` }}
+              />
+            </div>
+          </div>
+        )}
         
         {/* FLASHING NOTIFICATION BANNER */}
         {activeBanner && (
@@ -1200,7 +1725,7 @@ export default function App() {
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Trabaja de repartidor de pizzas para ganar dinero.</p>
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Compra vehículos y helicópteros en la Tienda.</p>
               <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Invierte en el Casino de la isla para duplicar tu botín.</p>
-              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> ¡Paga tu renta cada 5 días o quédate fuera!</p>
+              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> ¡Paga tu renta cada 3 días o quédate fuera!</p>
               <p className="font-black flex items-center gap-1.5 bg-yellow-100/80 p-2 rounded-xl border border-yellow-300 text-amber-950"><CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" /> <span>🎯 <strong>OBJETIVO REAL:</strong> ¡Compra el <strong>Helicóptero privado</strong> y reúne <strong>$10,000</strong> en mano para cargar combustible y escapar victorioso!</span></p>
             </div>
 
@@ -1238,7 +1763,11 @@ export default function App() {
               ) : (
                 <div className="text-gray-500 flex items-center gap-2 w-full justify-center">
                   <span className="inline-block w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-                  <span>Sin pedidos activos. Dirígete a la <strong className="text-pink-650">Pizzería central</strong> [0, 0] para tomar entregas.</span>
+                  <span>
+                    {hasOwnPizzeria 
+                      ? 'Sin pedidos activos. Dirígete a tu Base Propia [0, 245] para asignar el reparto.' 
+                      : 'Sin pedidos activos. Dirígete a la Pizzería central [0, 0] para tomar entregas.'}
+                  </span>
                 </div>
               )}
             </div>
@@ -1265,6 +1794,11 @@ export default function App() {
                 keysPressed={keysPressed}
                 virtualDirection={virtualDirection}
                 isVictory={false}
+                hasOwnPizzeria={hasOwnPizzeria}
+                playerMarketShare={playerMarketShare}
+                renovationLevel={renovationLevel}
+                employees={employees}
+                rivalDeliverers={rivalDeliverers}
                 onPlayerMove={(x, y, a) => {
                   setPlayerX(x);
                   setPlayerY(y);
@@ -1274,7 +1808,7 @@ export default function App() {
                   // Floating triggers locator
                 }}
                 onEnterCorner={(index) => {
-                  if (!isEscapeAsking && currentVehicleId === 'helicoptero') {
+                  if (!hasOwnPizzeria && !isEscapeAsking && currentVehicleId === 'helicoptero') {
                     setIsEscapeAsking(true);
                   }
                 }}
@@ -1405,6 +1939,248 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 6. Own Pizzeria main manager dashboard */}
+      <OwnPizzeriaModal
+        isOpen={isOwnPizzeriaOpen}
+        onClose={closeAllModals}
+        availableOrders={availableOrders}
+        activeOrders={activeOrders}
+        onAcceptOrder={handleAcceptOrder}
+        houses={houses}
+        currentVehicleId={currentVehicleId}
+        money={money}
+        renovationLevel={renovationLevel}
+        onUpgradeRenovation={handleUpgradeRenovation}
+        employeeLevel={employeeLevel}
+        onUpgradeEmployee={handleUpgradeEmployee}
+        playerMarketShare={playerMarketShare}
+        rivalMarketShare={100 - playerMarketShare}
+        rivalPassiveRate={rivalPassiveRate}
+        businessDaysHeld={businessDaysHeld}
+        pizzeriaName={pizzeriaName}
+        pizzeriaColor={pizzeriaColor}
+      />
+
+      {/* 7. Abandoned Pizzeria Purchase confirmation Overlay */}
+      {isBuyPizzeriaOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-amber-500 p-6 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-4">
+            <div className="text-center">
+              <span className="text-5xl inline-block animate-bounce">🏚️💥🏚️</span>
+              <h3 className="text-lg font-black text-amber-400 font-sans uppercase mt-2">Pizzería Abandonada</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Oportunidad de Expansión Comercial</p>
+            </div>
+            
+            <p className="text-xs text-slate-300 leading-normal text-center bg-slate-950/40 p-4 rounded-2xl border border-slate-800">
+              Estás parado frente a una vieja pizzería deteriorada. ¿Deseas comprar la propiedad por <strong className="text-yellow-400 font-mono">$10,000</strong>?
+              <br /><br />
+              <span className="text-amber-500 font-bold">⚠️ IMPORTANTE</span>: Al adquirirla, la vieja pizzería central en [0,0] dejará de aceptar pedidos y todos tus despachos se mudarán aquí. Además, no podrás escapar en helicóptero.
+            </p>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsBuyPizzeriaOpen(false)}
+                className="w-1/2 py-2.5 bg-slate-800 text-slate-400 hover:text-slate-250 text-xs font-bold uppercase rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button 
+                disabled={money < 10000}
+                onClick={() => {
+                  setMoney(m => m - 10000);
+                  setHasOwnPizzeria(true);
+                  setPlayerMarketShare(20);
+                  setRenovationLevel(0);
+                  setIsBuyPizzeriaOpen(false);
+                  setBusinessDaysHeld(0);
+                  setRivalPassiveRate(2);
+                  setIsCustomizationOpen(true); // Open branding screen!
+                  alertBanner("🏠 ¡IMPERIO COMIENZA! Adquiriste la Pizzería Abandonada ($10,000). Define la identidad visual de tu marca.");
+                  audio.playCasinoWin();
+                }}
+                className={`w-1/2 py-2.5 rounded-xl font-black text-xs transition uppercase ${
+                  money >= 10000 
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-md' 
+                    : 'bg-slate-800 text-slate-600 border border-slate-750 cursor-not-allowed'
+                }`}
+              >
+                {money >= 10000 ? 'Comprar ($10,000)' : 'Sin Fondos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Rival Pizzeria Buyout confirmation Overlay */}
+      {isBuyRivalOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-emerald-500 p-6 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-4">
+            <div className="text-center">
+              <span className="text-5xl inline-block animate-pulse">👑🔥🎯</span>
+              <h3 className="text-lg font-black text-emerald-400 font-sans uppercase mt-2">Derrumbar Competencia</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Unificación Oligopólica de la Isla</p>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-normal text-center bg-slate-950/45 p-4 rounded-2xl border border-slate-800">
+              Has conquistado el 100% de la participación de la isla. ¿Deseas adquirir las dependencias centrales de tu rival derrotado por <strong className="text-yellow-405 font-mono">$100,000</strong>?
+            </p>
+
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsBuyRivalOpen(false)}
+                className="w-1/2 py-2.5 bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-bold uppercase rounded-xl transition"
+              >
+                Cancelar
+              </button>
+              <button 
+                disabled={money < 100000}
+                onClick={() => {
+                  setMoney(m => m - 100000);
+                  setIsBuyRivalOpen(false);
+                  setIsRivalDecisionOpen(true);
+                  audio.playCasinoWin();
+                }}
+                className={`w-1/2 py-2.5 rounded-xl font-black text-xs transition uppercase ${
+                  money >= 100000 
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-md' 
+                    : 'bg-slate-800 text-slate-600 border border-slate-750 cursor-not-allowed'
+                }`}
+              >
+                {money >= 100000 ? 'Comprar ($100k)' : 'Sin Fondos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Final Crossroads Decision */}
+      {isRivalDecisionOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-yellow-400 p-8 rounded-3xl max-w-lg w-full shadow-2xl text-slate-100 flex flex-col gap-5">
+            <div className="text-center font-sans">
+              <div className="text-6xl mb-1 animate-pulse">👑✈️👑</div>
+              <h3 className="text-2xl font-black text-yellow-400 font-serif uppercase tracking-wider">Monopolio Absoluto</h3>
+              <p className="text-xs text-slate-400 font-semibold uppercase">Tus pizza-dólares controlan toda la isla</p>
+            </div>
+            
+            <p className="text-xs text-slate-200 leading-relaxed text-center bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+              Has adquirido la pizzería rival. La distribución local completa responde ahora ante tu firma corporativa de pizzas. Toma una decisión definitiva:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              {/* Opción A - Globalizarte */}
+              <button
+                onClick={() => {
+                  setIsRivalDecisionOpen(false);
+                  setHasGlobalized(true);
+                  setPlayerMarketShare(100);
+                  alertBanner("🌐 ¡GLOBALIZACIÓN EN MARCHA! Te has expandido a mercados internacionales. Tu imperio trasciende mares.");
+                  audio.playCasinoWin();
+                }}
+                className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 p-4 rounded-2xl text-center flex flex-col items-center gap-1.5 transition hover:-translate-y-1 cursor-pointer group"
+              >
+                <span className="text-3xl group-hover:scale-110 transition duration-150">🌐</span>
+                <span className="text-xs font-black uppercase text-amber-400">Globalizarte</span>
+                <span className="text-[10px] text-slate-400 leading-normal font-semibold">Lanza franquicias internacionales y sigue jugando en tu isla sin límites de capital.</span>
+              </button>
+
+              {/* Opción B - Quedarte en la Isla */}
+              <button
+                onClick={() => {
+                  setIsRivalDecisionOpen(false);
+                  setGameState('victory');
+                }}
+                className="bg-slate-950 border border-slate-800 hover:border-red-500/50 p-4 rounded-2xl text-center flex flex-col items-center gap-1.5 transition hover:-translate-y-1 cursor-pointer group"
+              >
+                <span className="text-3xl group-hover:scale-110 transition duration-150">🏝️</span>
+                <span className="text-xs font-black uppercase text-red-500">Retirarse en la Isla</span>
+                <span className="text-[10px] text-slate-400 leading-normal font-semibold">Declara victoria definitiva, finaliza el juego como el indiscutible rey multimillonario.</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Developer Terminal Password Dialog */}
+      {isCheatOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-indigo-500 p-6 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-4">
+            <div className="text-center">
+              <span className="text-4xl animate-bounce inline-block">🤫👾🤫</span>
+              <h3 className="text-base font-black text-indigo-400 uppercase tracking-widest mt-1">Consola del Desarrollador</h3>
+              <p className="text-[9px] text-slate-400 font-semibold uppercase">Introducir terminal de códigos del sistema de depuración</p>
+            </div>
+            
+            <div className="space-y-1.5 text-left">
+              <label className="text-[10px] uppercase font-bold text-slate-500">Contraseña Secreta:</label>
+              <input 
+                type="text"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (passwordInput === '67nashe') {
+                      setMoney(m => m + 10000000);
+                      setIsCheatOpen(false);
+                      setPasswordInput('');
+                      alertBanner("🔑 CONEXIÓN COMPLETA: ¡Has cargado secreto de $10,000,000 pizza-dólares adicionales!");
+                      audio.playCasinoWin();
+                    } else {
+                      alertBanner("❌ ACCESO RECHAZADO: Contraseña incorrecta.");
+                      audio.playFail();
+                    }
+                  }
+                }}
+                placeholder="Introducir código..."
+                className="w-full bg-slate-950 text-emerald-400 border-2 border-slate-800 focus:border-indigo-500 p-2.5 rounded-xl outline-none font-mono text-center tracking-wider text-xs"
+              />
+            </div>
+
+            <div className="flex gap-2 select-none">
+              <button 
+                onClick={() => {
+                  setIsCheatOpen(false);
+                  setPasswordInput('');
+                }}
+                className="w-1/2 py-2 bg-slate-800 text-slate-400 text-xs font-bold uppercase rounded-md hover:bg-slate-700 transition"
+              >
+                Cerrar
+              </button>
+              <button 
+                onClick={() => {
+                  if (passwordInput === '67nashe') {
+                    setMoney(m => m + 10000000);
+                    setIsCheatOpen(false);
+                    setPasswordInput('');
+                    alertBanner("🔑 CONEXIÓN COMPLETA: ¡Has cargado secreto de $10,000,000 pizza-dólares adicionales!");
+                    audio.playCasinoWin();
+                  } else {
+                    alertBanner("❌ ACCESO RECHAZADO: Contraseña incorrecta.");
+                    audio.playFail();
+                  }
+                }}
+                className="w-1/2 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase rounded-md transition hover:-translate-y-0.5 active:translate-y-0.5"
+              >
+                Validar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCustomizationOpen && (
+        <PizzeriaCustomizationModal
+          isOpen={isCustomizationOpen}
+          onClose={() => setIsCustomizationOpen(false)}
+          onSave={(name, color) => {
+            setPizzeriaName(name);
+            setPizzeriaColor(color);
+          }}
+          initialName={pizzeriaName}
+          initialColor={pizzeriaColor}
+        />
       )}
 
     </div>
