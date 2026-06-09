@@ -19,7 +19,7 @@ import {
   ShieldAlert, 
   Award,
   CheckCircle2,
-  Lock
+  Lock,
 } from 'lucide-react';
 import { Order, House, VehicleId } from '../types';
 import { audio } from '../utils/audio';
@@ -45,6 +45,10 @@ interface OwnPizzeriaModalProps {
   businessDaysHeld: number;
   pizzeriaName: string;
   pizzeriaColor: string;
+
+  // Business tutorial integrations
+  businessTutorialStep?: 'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed';
+  onSetBusinessTutorialStep?: (step: 'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed') => void;
 }
 
 export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
@@ -66,8 +70,21 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
   businessDaysHeld,
   pizzeriaName,
   pizzeriaColor,
+  businessTutorialStep = 'off',
+  onSetBusinessTutorialStep,
 }) => {
   const [activeTab, setActiveTab] = useState<'pedidos' | 'renovacion' | 'empleados'>('pedidos');
+
+  // Automatically adjust active business tab based on tutorial progress to keep the flow extremely intuitive
+  React.useEffect(() => {
+    if (isOpen) {
+      if (businessTutorialStep === 'upgrades') {
+        setActiveTab('renovacion');
+      } else if (businessTutorialStep === 'staff') {
+        setActiveTab('empleados');
+      }
+    }
+  }, [isOpen, businessTutorialStep]);
 
   if (!isOpen) return null;
 
@@ -184,7 +201,11 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
         </div>
 
         {/* Corporate Status Sub-Banner */}
-        <div className="bg-slate-950/90 py-3 px-6 flex flex-wrap justify-between items-center text-xs border-b border-slate-800 gap-4">
+        <div className={`py-3 px-6 flex flex-wrap justify-between items-center text-xs border-b gap-4 transition duration-300 ${
+          businessTutorialStep === 'competition' 
+            ? 'bg-pink-950/90 border-pink-400 border-b-4 animate-pulse' 
+            : 'bg-slate-950/90 border-slate-800'
+        }`}>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5" title="Cuota que domina tu marca">
               <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -260,6 +281,79 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
 
           {/* Right Panel Main View Area */}
           <div className="flex-1 p-6 bg-slate-900/60 overflow-y-auto">
+            
+            {/* INLINE BUSINESS TUTORIAL BANNERS */}
+            {businessTutorialStep === 'upgrades' && (
+              <div className="bg-pink-955/80 border-2 border-pink-400 p-4 rounded-2xl text-left text-xs text-pink-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
+                <div className="flex items-center gap-1.5 font-black text-sm text-pink-400">
+                  <span className="animate-bounce">🛠️</span>
+                  <span>TUTORIAL PASO 1: RENOVACIONES Y REFORMAS</span>
+                </div>
+                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
+                  Debes invertir dinero para renovar tu negocio y desbloquear nuevas funciones. Cada nivel de reforma mejora visualmente la pizzería en el mapa y desbloquea nuevas ventajas competitivas (¡como solucionar la penalización del 50% de cobro por edificio deteriorado!).
+                </p>
+                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
+                  <span className="text-[9px] text-pink-300 font-extrabold uppercase tracking-wider">👉 Compra mejoras de la lista abajo o continúa</span>
+                  <button 
+                    onClick={() => {
+                      audio.playUpgrade();
+                      onSetBusinessTutorialStep?.('competition');
+                    }}
+                    className="px-3 py-1.5 bg-pink-500 hover:bg-pink-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
+                  >
+                    Siguiente: Competencia <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {businessTutorialStep === 'competition' && (
+              <div className="bg-pink-955/80 border-2 border-pink-400 p-4 rounded-2xl text-left text-xs text-pink-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
+                <div className="flex items-center gap-1.5 font-black text-sm text-pink-400">
+                  <span className="animate-bounce">📊</span>
+                  <span>TUTORIAL PASO 2: BARRA DE COMPETENCIA</span>
+                </div>
+                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
+                  Observa los porcentajes de arriba. Tu participación inicial es del 20%. Incrementas tu participación entregando pedidos y contratando personal. El rival crece automáticamente cada minuto. <strong>Si el rival alcanza el 100% de cuota, ¡perderás la partida por quiebra comercial!</strong>
+                </p>
+                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
+                  <span className="text-[9px] text-pink-300 font-extrabold uppercase tracking-wider">👉 Siguiente: Entiende el Personal Autónomo</span>
+                  <button 
+                    onClick={() => {
+                      audio.playUpgrade();
+                      onSetBusinessTutorialStep?.('staff');
+                    }}
+                    className="px-3 py-1.5 bg-pink-500 hover:bg-pink-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
+                  >
+                    Siguiente: Personal <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {businessTutorialStep === 'staff' && (
+              <div className="bg-emerald-955/80 border-2 border-emerald-400 p-4 rounded-2xl text-left text-xs text-emerald-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
+                <div className="flex items-center gap-1.5 font-black text-sm text-emerald-400">
+                  <span className="animate-bounce">👥</span>
+                  <span>TUTORIAL PASO 3: PERSONAL Y AUTOMATIZACIÓN</span>
+                </div>
+                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
+                  ¡Ahora puedes contratar personal para automatizar tu pizzería! Los empleados comprados en esta pestaña generan ingresos de efectivo e incrementan tu competencia de forma pasiva en piloto automático. Además, verás físicamente a tus repartidores recorriendo el mapa.
+                </p>
+                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
+                  <span className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">👉 Generación en piloto automático habilitada</span>
+                  <button 
+                    onClick={() => {
+                      audio.playSuccess();
+                      onSetBusinessTutorialStep?.('completed');
+                    }}
+                    className="px-3 py-1.5 bg-emerald-555 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
+                  >
+                    Completar Tutorial <CheckCircle2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* TAB: MANUAL PEDIDOS */}
             {activeTab === 'pedidos' && (

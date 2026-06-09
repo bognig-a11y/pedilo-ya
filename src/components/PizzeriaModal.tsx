@@ -16,6 +16,7 @@ interface PizzeriaModalProps {
   onAcceptOrder: (order: Order) => void;
   houses: House[];
   currentVehicleId: VehicleId;
+  tutorialStep?: string;
 }
 
 export const PizzeriaModal: React.FC<PizzeriaModalProps> = ({
@@ -26,6 +27,7 @@ export const PizzeriaModal: React.FC<PizzeriaModalProps> = ({
   onAcceptOrder,
   houses,
   currentVehicleId,
+  tutorialStep,
 }) => {
   if (!isOpen) return null;
 
@@ -74,6 +76,18 @@ export const PizzeriaModal: React.FC<PizzeriaModalProps> = ({
 
         {/* Content list */}
         <div className="p-6 max-h-[460px] overflow-y-auto space-y-4 bg-gray-50">
+          {tutorialStep === 'pizzeria' && (
+            <div className="bg-amber-100 text-amber-950 p-4 rounded-2xl border-2 border-amber-300 flex items-center gap-3 animate-pulse mb-4">
+              <span className="text-3xl">🎓</span>
+              <div className="text-xs">
+                <h4 className="font-black uppercase tracking-wider text-amber-900">Puntapié Inicial: Acepta tu primer pedido</h4>
+                <p className="mt-1 font-semibold leading-normal">
+                  Haz clic en el botón <strong className="text-red-700 font-bold">"Aceptar Pedido"</strong> de cualquiera de las opciones de abajo para iniciar tu carrera de delivery. Tendrás un límite de tiempo para entregarlo, pero no te preocupes, el entrenamiento te protege de fracasar.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {availableOrders.map((order, index) => {
               const destHouse = houses.find(h => h.id === order.houseId);

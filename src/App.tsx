@@ -19,14 +19,55 @@ import { GameCanvas } from './components/GameCanvas';
 import { Joystick } from './components/Joystick';
 import { audio } from './utils/audio';
 
-// Dynamic obstacle generator
+/// Dynamic obstacle generator
 const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, completedOrdersCount: number): Obstacle[] => {
   const list: Obstacle[] = [];
-  
-  // 1. PLACE TREES (scattered randomly on the map, allowing anywhere)
-  for (let i = 0; i < 34; i++) {
-    let x = (Math.random() * 800) - 400;
-    let y = (Math.random() * 800) - 400;
+  const STREET_COORDS = [-818, -613, -368, -123, 123, 368, 613, 818];
+
+  const isValidPlacement = (x: number, y: number, minDistanceToOthers = 30): boolean => {
+    // 1. Check streets
+    const onStreet = STREET_COORDS.some(sc => Math.abs(x - sc) < 22) || STREET_COORDS.some(sc => Math.abs(y - sc) < 22);
+    if (onStreet) return false;
+
+    // 2. Check main buildings
+    const dPiz = Math.sqrt(x*x + y*y);
+    if (dPiz < 40) return false;
+    const dOwnPiz = Math.sqrt(x*x + (y - 245)**2);
+    if (dOwnPiz < 40) return false;
+    const dDealer = Math.sqrt((x - (-245))**2 + y**2);
+    if (dDealer < 40) return false;
+    const dCas = Math.sqrt((x - 245)**2 + y**2);
+    if (dCas < 40) return false;
+
+    // 3. Check houses
+    const nearHouse = houses.some(h => Math.sqrt((x - h.x)**2 + (y - h.y)**2) < 25);
+    if (nearHouse) return false;
+
+    // 4. Check already placed items in list
+    const nearOther = list.some(item => Math.sqrt((x - item.x)**2 + (y - item.y)**2) < minDistanceToOthers);
+    if (nearOther) return false;
+
+    return true;
+  };
+
+  // 1. PLACE TREES (scattered randomly on the map, nicely separated)
+  for (let i = 0; i < 125; i++) {
+    let placed = false;
+    let attempts = 0;
+    let x = 0, y = 0;
+    while (attempts < 100 && !placed) {
+      x = (Math.random() * 1760) - 880;
+      y = (Math.random() * 1760) - 880;
+      if (isValidPlacement(x, y, 32)) {
+        placed = true;
+      }
+      attempts++;
+    }
+    // Fallback if tight
+    if (!placed) {
+      x = (Math.random() * 1760) - 880;
+      y = (Math.random() * 1760) - 880;
+    }
     list.push({
       id: `tree-${i}-${Date.now()}`,
       type: 'tree',
@@ -36,10 +77,23 @@ const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, 
     });
   }
 
-  // 2. PLACE MUD PUDDLES (scattered randomly, allowing anywhere)
-  for (let i = 0; i < 15; i++) {
-    let x = (Math.random() * 700) - 350;
-    let y = (Math.random() * 700) - 350;
+  // 2. PLACE MUD PUDDLES (scattered on grass blocks, nicely separated)
+  for (let i = 0; i < 50; i++) {
+    let placed = false;
+    let attempts = 0;
+    let x = 0, y = 0;
+    while (attempts < 100 && !placed) {
+      x = (Math.random() * 1600) - 800;
+      y = (Math.random() * 1600) - 800;
+      if (isValidPlacement(x, y, 40)) {
+        placed = true;
+      }
+      attempts++;
+    }
+    if (!placed) {
+      x = (Math.random() * 1600) - 800;
+      y = (Math.random() * 1600) - 800;
+    }
     list.push({
       id: `mud-${i}-${Date.now()}`,
       type: 'mud',
@@ -51,15 +105,14 @@ const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, 
 
   // 3. PLACE TRAFFIC STREET CARS (circulating on the roads!)
   const colors = ['#EF4444', '#3B82F6', '#1E293B', '#F59E0B', '#10B981', '#EC4899'];
-  const STREET_COORDS = [-368, -123, 123, 368];
   const streets: { startX: number; startY: number; endX: number; endY: number; angle: number }[] = [];
 
   // Horizontal streets
   STREET_COORDS.forEach(Y_c => {
     streets.push({
-      startX: -440,
+      startX: -880,
       startY: Y_c,
-      endX: 440,
+      endX: 880,
       endY: Y_c,
       angle: 0
     });
@@ -69,16 +122,16 @@ const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, 
   STREET_COORDS.forEach(X_c => {
     streets.push({
       startX: X_c,
-      startY: -440,
+      startY: -880,
       endX: X_c,
-      endY: 440,
+      endY: 880,
       angle: Math.PI / 2
     });
   });
 
   streets.forEach((st, idx) => {
-    // Place 2 cars per street lane in opposite directions
-    for (let c = 0; c < 2; c++) {
+    // Place 3 cars per street lane in opposite directions
+    for (let c = 0; c < 3; c++) {
       const t = Math.random() * 0.7 + 0.15;
       const carX = st.startX + (st.endX - st.startX) * t;
       const carY = st.startY + (st.endY - st.startY) * t;
@@ -92,9 +145,9 @@ const generateDynamicObstacles = (houses: House[], currentVehicleId: VehicleId, 
         x: carX,
         y: carY,
         size: 12,
-        vx: Math.cos(st.angle) * speed * (c === 1 ? -1 : 1),
-        vy: Math.sin(st.angle) * speed * (c === 1 ? -1 : 1),
-        angle: st.angle + (c === 1 ? Math.PI : 0),
+        vx: Math.cos(st.angle) * speed * (c % 2 === 1 ? -1 : 1),
+        vy: Math.sin(st.angle) * speed * (c % 2 === 1 ? -1 : 1),
+        angle: st.angle + (c % 2 === 1 ? Math.PI : 0),
         color: colors[(idx + c) % colors.length],
         streetIndex: idx,
       });
@@ -119,15 +172,17 @@ const generateHouses = (): House[] => {
     "#F472B6", "#FB7185", "#38BDF8", "#FCD34D", "#4ADE80"
   ];
 
-  const colBounds = [-450, -368, -123, 123, 368, 450];
-  const rowBounds = [-450, -368, -123, 123, 368, 450];
+  const colBounds = [-900, -818, -613, -368, -123, 123, 368, 613, 818, 900];
+  const rowBounds = [-900, -818, -613, -368, -123, 123, 368, 613, 818, 900];
 
   const cells: { col: number; row: number }[] = [];
-  for (let r = 1; r <= 3; r++) {
-    for (let c = 1; c <= 3; c++) {
-      // Exclude middle square (Row 2, Col 2) and square below middle (Row 3, Col 2) only!
-      if (r === 2 && c === 2) continue;
-      if (r === 3 && c === 2) continue;
+  for (let r = 1; r <= 7; r++) {
+    for (let c = 1; c <= 7; c++) {
+      // Exclude cells around major buildings to ensure no overlapping
+      if (r === 4 && c === 4) continue; // Pizzería original
+      if (r === 4 && c === 3) continue; // Concesionario
+      if (r === 4 && c === 5) continue; // Casino
+      if (r === 5 && c === 4) continue; // Own Pizzería / Pizzería abandonada
       cells.push({ col: c, row: r });
     }
   }
@@ -139,8 +194,8 @@ const generateHouses = (): House[] => {
     [shuffledCells[i], shuffledCells[j]] = [shuffledCells[j], shuffledCells[i]];
   }
 
-  // Generate 28 houses (increased from 20 to add more houses)
-  const totalHousesToGenerate = 28;
+  // Generate 60 houses (scaled up from 28 to support expanded map)
+  const totalHousesToGenerate = 60;
   for (let i = 0; i < totalHousesToGenerate; i++) {
     const targetCell = shuffledCells[i % shuffledCells.length];
     const cellMinX = colBounds[targetCell.col];
@@ -256,6 +311,15 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [muted, setMuted] = useState(false);
 
+  // Tutorial Systems State
+  const [tutorialStep, setTutorialStep] = useState<'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed'>(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('tutorial_shown')) {
+      return 'off';
+    }
+    return 'prompt';
+  });
+  const [businessTutorialStep, setBusinessTutorialStep] = useState<'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed'>('off');
+
   // Core Player States
   const [money, setMoney] = useState(50);
   const [currentVehicleId, setCurrentVehicleId] = useState<VehicleId>('pie');
@@ -364,7 +428,7 @@ export default function App() {
   const currentVehicle = VEHICLES_LIST.find(v => v.id === currentVehicleId) || VEHICLES_LIST[0];
 
   // Map limits
-  const LIMIT = 450;
+  const LIMIT = 900;
 
   physicsStateRef.current = {
     gameState,
@@ -397,6 +461,8 @@ export default function App() {
     renovationLevel,
     pizzeriaName,
     pizzeriaColor,
+    tutorialStep,
+    businessTutorialStep,
   };
 
   // Initialize and regenerate 3 orders
@@ -488,8 +554,8 @@ export default function App() {
 
         const state = physicsStateRef.current;
 
-        // Check secret password cheat in bottom-right corner (around 440, 440)
-        const distCornerBR = Math.sqrt((curX - 440) ** 2 + (curY - 440) ** 2);
+        // Check secret password cheat in bottom-right corner (around 880, 880)
+        const distCornerBR = Math.sqrt((curX - 880) ** 2 + (curY - 880) ** 2);
         if (distCornerBR < 55 && !state.isCheatOpen) {
           setIsCheatOpen(true);
           setIsPizzeriaOpen(false);
@@ -767,7 +833,7 @@ export default function App() {
               let ny = obs.y + obs.vy * dt;
 
               // Bounce cars when hitting boundaries of streets loop
-              if (nx < -445 || nx > 445 || ny < -445 || ny > 445) {
+              if (nx < -885 || nx > 885 || ny < -885 || ny > 885) {
                 return {
                   ...obs,
                   vx: -obs.vx,
@@ -837,11 +903,11 @@ export default function App() {
               alertBanner(`💸 ¡TE ROBÓ EL VAGABUNDO! Perdiste $${stolenAmount}`);
 
               // Teleport vagabond back to a far random spot to prevent locking player
-              const coin = Math.random() < 0.5 ? -380 : 380;
+              const coin = Math.random() < 0.5 ? -750 : 750;
               return {
                 ...vag,
                 x: coin,
-                y: Math.random() * 800 - 400,
+                y: Math.random() * 1600 - 800,
               };
             }
 
@@ -870,6 +936,14 @@ export default function App() {
             // SUCCESSFUL PIZZA DROP OFF !
             audio.playSuccess();
             
+            // Advance tutorial step 2 to step 3 (concesionario)
+            if (state.tutorialStep === 'delivery') {
+              setTutorialStep('concesionario');
+              setTimeout(() => {
+                alertBanner("🎉 ¡PRIMERA ENTREGA EXITOSA! Cobraste tus primeras monedas. Ahora continuemos con el Paso 3.");
+              }, 1500);
+            }
+
             // Calculate final reward with Ganancia Level percentage bonus payout (12% per level)
             const bonusPercent = state.upgrades.ganancia * 0.12;
             let finalPayout = Math.round(primaryDelivery.reward * (1 + bonusPercent));
@@ -950,8 +1024,9 @@ export default function App() {
       // 1. Day Clock tick
       if (dayTimeLeft <= 1) {
         // Increment Day (Day transitions from `day` to `day + 1`)
-        // Rent Due checks: Only if they DO NOT own their pizzeria!
-        const rentDue = (!hasOwnPizzeria && day % 3 === 0) ? Math.floor(day / 3) * 500 : 0;
+        // Rent Due checks: Only if they DO NOT own their pizzeria! No rent during the tutorial.
+        const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
+        const rentDue = (!hasOwnPizzeria && day % 3 === 0 && !isTutorialActive) ? Math.floor(day / 3) * 500 : 0;
 
         if (rentDue > 0) {
           if (money < rentDue) {
@@ -981,6 +1056,11 @@ export default function App() {
           setPlayerMarketShare(prev => {
             const nextShare = Math.max(0, prev - shareLoss);
             if (nextShare <= 0) {
+              if (businessTutorialStep !== 'off' && businessTutorialStep !== 'completed') {
+                // Safeguard during business/corporate tutorial so player can understand without stress
+                alertBanner("⚠️ PARTICIPACIÓN AL 0%. Salvado de Game Over por estar en el tutorial empresarial.");
+                return 5;
+              }
               // Game Over! Market share hit 0% (rival reaches 100%)
               audio.playFail();
               setGameState('gameover');
@@ -1061,8 +1141,11 @@ export default function App() {
           audio.playFail();
           setFailures(f => {
             const nextFailures = f + 1;
-            if (nextFailures >= 3) {
+            const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
+            if (nextFailures >= 3 && !isTutorialActive) {
               setGameState('gameover');
+            } else if (nextFailures >= 3 && isTutorialActive) {
+              alertBanner("🎓 TUTORIAL PROTEGIDO: Has fallado 3 entregas, pero la protección de entrenamiento evitó el Game Over.");
             }
             return nextFailures;
           });
@@ -1371,6 +1454,12 @@ export default function App() {
     const nextQueue = [...activeOrders, { ...order, timeLeft: order.timeLimit }];
     setActiveOrders(nextQueue);
 
+    // If tutorial step 1 is active, advance to step 2 delivery
+    if (tutorialStep === 'pizzeria') {
+      setTutorialStep('delivery');
+      alertBanner("🏠 ¡PEDIDO CARGADO! Ahora dirígete a la casa objetivo guiándote por el indicador rosa.");
+    }
+
     // Remove the selected order from available list
     setAvailableOrders(prev => prev.filter(o => o.id !== order.id));
 
@@ -1390,8 +1479,8 @@ export default function App() {
         
         for (let v = 0; v < vagQuantity; v++) {
           // Far coordinates spawn so players can adapt steering
-          const farX = Math.random() < 0.5 ? -370 : 370;
-          const farY = Math.random() < 0.5 ? -370 : 370;
+          const farX = Math.random() < 0.5 ? -750 : 750;
+          const farY = Math.random() < 0.5 ? -750 : 750;
           vagList.push({
             id: `vag-${v}-${Date.now()}`,
             x: farX,
@@ -1802,13 +1891,22 @@ export default function App() {
                 pizzeriaName={pizzeriaName}
                 pizzeriaColor={pizzeriaColor}
                 hasGlobalized={hasGlobalized}
+                tutorialStep={tutorialStep}
+                businessTutorialStep={businessTutorialStep}
                 onPlayerMove={(x, y, a) => {
                   setPlayerX(x);
                   setPlayerY(y);
                   setPlayerAngle(a);
                 }}
                 onInteract={(zone) => {
-                  // Floating triggers locator
+                  if (tutorialStep === 'concesionario' && zone === 'concesionario') {
+                    setTutorialStep('casino');
+                    alertBanner("🚲 ¡EXCELENTE! Llegaste a la Tienda de Vehículos. Ahora dirígete al Casino guiándote con el indicador violeta.");
+                    audio.playUpgrade();
+                  } else if (tutorialStep === 'casino' && zone === 'casino') {
+                    setTutorialStep('completed');
+                    audio.playCasinoWin();
+                  }
                 }}
                 onEnterCorner={(index) => {
                   if (!hasOwnPizzeria && !isEscapeAsking && currentVehicleId === 'helicoptero') {
@@ -1890,6 +1988,7 @@ export default function App() {
         onAcceptOrder={handleAcceptOrder}
         houses={houses}
         currentVehicleId={currentVehicleId}
+        tutorialStep={tutorialStep}
       />
 
       {/* 2. Concesionario modal */}
@@ -1899,6 +1998,7 @@ export default function App() {
         currentVehicleId={currentVehicleId}
         money={money}
         onBuyVehicle={handleBuyVehicle}
+        tutorialStep={tutorialStep}
       />
 
       {/* 3. Upgrades modal */}
@@ -1917,6 +2017,7 @@ export default function App() {
         money={money}
         upgrades={upgrades}
         onAddMoney={handleCasinoAddMoney}
+        tutorialStep={tutorialStep}
       />
 
       {/* 5. Helicopters Escape Confirmation Banner */}
@@ -1964,6 +2065,8 @@ export default function App() {
         businessDaysHeld={businessDaysHeld}
         pizzeriaName={pizzeriaName}
         pizzeriaColor={pizzeriaColor}
+        businessTutorialStep={businessTutorialStep}
+        onSetBusinessTutorialStep={setBusinessTutorialStep}
       />
 
       {/* 7. Abandoned Pizzeria Purchase confirmation Overlay */}
@@ -2176,14 +2279,117 @@ export default function App() {
       {isCustomizationOpen && (
         <PizzeriaCustomizationModal
           isOpen={isCustomizationOpen}
-          onClose={() => setIsCustomizationOpen(false)}
+          onClose={() => {
+            setIsCustomizationOpen(false);
+            const businessShown = localStorage.getItem('business_shown');
+            if (!businessShown) {
+              setBusinessTutorialStep('prompt');
+            }
+          }}
           onSave={(name, color) => {
             setPizzeriaName(name);
             setPizzeriaColor(color);
+            setIsCustomizationOpen(false);
+            const businessShown = localStorage.getItem('business_shown');
+            if (!businessShown) {
+              setBusinessTutorialStep('prompt');
+            }
           }}
           initialName={pizzeriaName}
           initialColor={pizzeriaColor}
         />
+      )}
+
+      {/* 8. Initial Tutorial Invite Dialog */}
+      {tutorialStep === 'prompt' && gameState === 'playing' && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-amber-500 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
+            <div>
+              <span className="text-5xl inline-block animate-bounce">🎓</span>
+              <h3 className="text-xl font-black text-amber-400 font-sans uppercase mt-3">¿Deseas realizar el tutorial?</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aprende las mecánicas de entrega sin presión</p>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+              Te guiaremos paso a paso a través de las misiones clave (Pedidos, Vehículos, Casino) con una guía celeste visual constante.
+              <br /><br />
+              <span className="text-rose-400 font-bold">🕊️ PROTECCIÓN CIVIL INTENSA</span>:
+              Mientras el tutorial esté activo, <strong className="text-white">no pagarás renta</strong> y estarás <strong className="text-white">a salvo de cualquier Game Over</strong> por fallar entregas.
+            </p>
+
+            <div className="flex gap-3 mt-1">
+              <button
+                onClick={() => {
+                  setTutorialStep('off');
+                  localStorage.setItem('tutorial_shown', 'true');
+                  audio.playRentPay();
+                  alertBanner("🏁 Comienzo normal: ¡Suerte en la isla del delivery!");
+                }}
+                className="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white text-xs font-black uppercase rounded-2xl transition cursor-pointer"
+              >
+                No, gracias
+              </button>
+              <button
+                onClick={() => {
+                  setTutorialStep('pizzeria');
+                  localStorage.setItem('tutorial_shown', 'true');
+                  audio.playUpgrade();
+                  alertBanner("🎓 TUTORIAL CAPTADO: Dirígete a la Pizzería central ([0,0]) iluminada con el cubo dorado.");
+                }}
+                className="w-1/2 py-3 bg-amber-500 hover:bg-amber-600 text-slate-955 text-xs font-black uppercase rounded-2xl transition shadow-md cursor-pointer"
+              >
+                ¡Sí, por favor!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Business/Corporate Corporate Tutorial Invite Dialog */}
+      {businessTutorialStep === 'prompt' && gameState === 'playing' && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-pink-500 p-8 rounded-3xl max-w-sm w-full shadow-2xl text-slate-100 flex flex-col gap-5 text-center">
+            <div>
+              <span className="text-5xl inline-block animate-bounce">🏢🍕🏢</span>
+              <h3 className="text-xl font-black text-pink-400 font-sans uppercase mt-3">¿Deseas realizar el tutorial empresarial?</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aprende a dominar el mercado corporativo</p>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+              Ahora que has comprado la propiedad, la pizzería rival te hará la competencia por capturar participación de mercado.
+              <br /><br />
+              <span className="text-emerald-400 font-bold">🛠️ GUÍA ESTRATÉGICA ACTIVA</span>:
+              Te guiaremos a través de la interfaz administrativa para mejorar tu base, contratar repartidores y derrotar al rival sin riesgo de quiebra.
+            </p>
+
+            <div className="flex gap-3 mt-1">
+              <button
+                onClick={() => {
+                  setBusinessTutorialStep('off');
+                  localStorage.setItem('business_shown', 'true');
+                  audio.playRentPay();
+                  alertBanner("💼 ¡Suerte construyendo tu imperio de la pizza!");
+                }}
+                className="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white text-xs font-black uppercase rounded-2xl transition cursor-pointer"
+              >
+                No, gracias
+              </button>
+              <button
+                onClick={() => {
+                  setBusinessTutorialStep('upgrades');
+                  localStorage.setItem('business_shown', 'true');
+                  audio.playUpgrade();
+                  // Open the own pizzeria modal directly!
+                  setIsOwnPizzeriaOpen(true);
+                  alertBanner("🎓 INTERFAZ CORPORATIVA: Entrando a la consola de administración. Sigue los banners explicativos.");
+                }}
+                className="w-1/2 py-3 bg-pink-500 hover:bg-pink-600 text-white text-xs font-black uppercase rounded-2xl transition shadow-md cursor-pointer"
+              >
+                ¡Sí, por favor!
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

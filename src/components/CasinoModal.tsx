@@ -21,6 +21,7 @@ interface CasinoModalProps {
   money: number;
   upgrades: Upgrades;
   onAddMoney: (amount: number) => void;
+  tutorialStep?: string;
 }
 
 type Mode = 'menu' | 'ruleta' | 'slots' | 'blackjack';
@@ -68,6 +69,7 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
   money,
   upgrades,
   onAddMoney,
+  tutorialStep,
 }) => {
   const [activeMode, setActiveMode] = useState<Mode>('menu');
 
@@ -770,6 +772,18 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
           {/* MENU VIEW */}
           {activeMode === 'menu' && (
             <div className="space-y-6">
+              {tutorialStep === 'casino' && (
+                <div className="bg-purple-950 text-slate-100 p-5 rounded-2xl border-2 border-purple-400 flex items-center gap-4 animate-pulse">
+                  <span className="text-4xl shrink-0">🎉🏆🎉</span>
+                  <div className="text-xs">
+                    <h4 className="font-extrabold text-purple-200 text-sm uppercase tracking-wide">¡Felicidades, completaste la guía de iniciación!</h4>
+                    <p className="mt-1 text-slate-350 font-semibold leading-relaxed">
+                      Llegaste al majestuoso Casino de la Isla. Aquí concluye el tutorial inicial guiado. A partir de ahora, tienes control total, se cobrará renta de manera regular cada 3 días y podrás perder por acumular fallos si te descuidas. ¡Conviértete en el repartidor legendario más rico e influyente de la isla!
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Pocket Info */}
               <div className="bg-slate-900 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-center border border-slate-800 gap-3">
                 <div>

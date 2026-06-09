@@ -47,6 +47,8 @@ interface GameCanvasProps {
   pizzeriaName: string;
   pizzeriaColor: string;
   hasGlobalized: boolean;
+  tutorialStep?: 'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed';
+  businessTutorialStep?: 'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed';
 }
 
 // 3D Projection & Painter utility types
@@ -91,6 +93,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   pizzeriaName,
   pizzeriaColor,
   hasGlobalized,
+  tutorialStep = 'off',
+  businessTutorialStep = 'off',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -109,12 +113,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const OWN_PIZZERIA_X = 0;
   const OWN_PIZZERIA_Y = 245;
 
-  // Helipad positions in the 4 corners of the map (-450 to 450)
+  // Helipad positions in the 4 corners of the map (-900 to 900)
   const CORNERS = [
-    { x: -440, y: -440 }, // Top-Left
-    { x: 440, y: -440 },  // Top-Right
-    { x: -440, y: 440 },  // Bottom-Left
-    { x: 440, y: 440 },   // Bottom-Right
+    { x: -880, y: -880 }, // Top-Left
+    { x: 880, y: -880 },  // Top-Right
+    { x: -880, y: 880 },  // Bottom-Left
+    { x: 880, y: 880 },   // Bottom-Right
   ];
 
   // Sync props to refs to avoid tearing down the requestAnimationFrame loop
@@ -138,6 +142,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     pizzeriaName,
     pizzeriaColor,
     hasGlobalized,
+    tutorialStep,
+    businessTutorialStep,
   });
 
   renderStateRef.current = {
@@ -160,6 +166,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     pizzeriaName,
     pizzeriaColor,
     hasGlobalized,
+    tutorialStep,
+    businessTutorialStep,
   };
 
   // Camera coordinates (lerping towards player)
@@ -318,6 +326,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       pizzeriaName,
       pizzeriaColor,
       hasGlobalized,
+      tutorialStep,
+      businessTutorialStep,
     } = renderStateRef.current;
 
     // Clear Canvas with lovely clear blue sky/ocean background
@@ -475,8 +485,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const tileSize = 80;
 
     // Draw sand shoreline as tiled grid to prevent projection flips when player goes far or near edges
-    for (let gx = -480; gx < 480; gx += tileSize) {
-      for (let gy = -480; gy < 480; gy += tileSize) {
+    for (let gx = -960; gx < 960; gx += tileSize) {
+      for (let gy = -960; gy < 960; gy += tileSize) {
         const pts = [
           { x: gx, y: gy, z: -1 },
           { x: gx + tileSize, y: gy, z: -1 },
@@ -511,8 +521,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // Draw green island grass as tiled grid to prevent projection flips when player goes far or near edges
-    for (let gx = -450; gx < 450; gx += 60) {
-      for (let gy = -450; gy < 450; gy += 60) {
+    for (let gx = -900; gx < 900; gx += 60) {
+      for (let gy = -900; gy < 900; gy += 60) {
         const pts = [
           { x: gx, y: gy, z: 0 },
           { x: gx + 60, y: gy, z: 0 },
@@ -547,28 +557,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     // DRAW STREETS & ROADS (Tarmac grey - subdivided segment-by-segment to prevent projection stretching)
-    const STREET_COORDS = [-368, -123, 123, 368];
+    const STREET_COORDS = [-818, -613, -368, -123, 123, 368, 613, 818];
     const STREET_WIDTH = 22;
 
     const streetPlanners: { x: number; y: number; w: number; h: number; isVert: boolean }[] = [];
 
-    // 4 vertical streets
+    // 8 vertical streets
     STREET_COORDS.forEach(X_c => {
       streetPlanners.push({
         x: X_c - STREET_WIDTH / 2,
-        y: -440,
+        y: -880,
         w: STREET_WIDTH,
-        h: 880,
+        h: 1760,
         isVert: true
       });
     });
 
-    // 4 horizontal streets
+    // 8 horizontal streets
     STREET_COORDS.forEach(Y_c => {
       streetPlanners.push({
-        x: -440,
+        x: -880,
         y: Y_c - STREET_WIDTH / 2,
-        w: 880,
+        w: 1760,
         h: STREET_WIDTH,
         isVert: false
       });
@@ -700,6 +710,52 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
     });
+
+    // TUTORIAL VISUAL BEACONS AND CELESTIAL GLOW INDICATORS
+    const pushCheckpoint = (cx: number, cy: number, radius: number, color: string, outlineColor: string, label: string) => {
+      const numPts = 12;
+      const pts: Point3D[] = [];
+      for (let i = 0; i < numPts; i++) {
+        const a = (i / numPts) * Math.PI * 2;
+        pts.push({
+          x: cx + Math.cos(a) * radius,
+          y: cy + Math.sin(a) * radius,
+          z: 0.5,
+        });
+      }
+      const depthsPrj = pts.map(proj);
+      const avgD = depthsPrj.reduce((sum, p) => sum + p.depth, 0) / pts.length;
+
+      faces.push({
+        points: pts,
+        color,
+        outlineColor,
+        outlineWidth: 2.5,
+        text: label.toUpperCase(),
+        avgDepth: avgD,
+      });
+
+      // Push floating neon double stack above it to look super cool and visible from afar in 3D!
+      push3DBox(cx, cy, 32, 5, 5, 14, { top: outlineColor, front: color, side: outlineColor }, 0, `📍 ${label}`);
+    };
+
+    if (tutorialStep === 'pizzeria') {
+      pushCheckpoint(PIZZERIA_X, PIZZERIA_Y, 32, 'rgba(251, 191, 36, 0.4)', '#F59E0B', 'Tomar pedido');
+    } else if (tutorialStep === 'delivery' && activeOrders.length > 0) {
+      const currentActive = activeOrders[0];
+      const house = houses.find(h => h.id === currentActive.houseId);
+      if (house) {
+        pushCheckpoint(house.x, house.y, 22, 'rgba(16, 185, 129, 0.4)', '#10B981', `Entregar Casa ${house.number}`);
+      }
+    } else if (tutorialStep === 'concesionario') {
+      pushCheckpoint(DEALER_X, DEALER_Y, 28, 'rgba(59, 130, 246, 0.4)', '#3B82F6', 'Visitar Tienda');
+    } else if (tutorialStep === 'casino') {
+      pushCheckpoint(CASINO_X, CASINO_Y, 28, 'rgba(139, 92, 246, 0.4)', '#8B5CF6', 'Visitar Casino');
+    }
+
+    if (businessTutorialStep === 'upgrades') {
+      pushCheckpoint(OWN_PIZZERIA_X, OWN_PIZZERIA_Y, 32, 'rgba(236, 72, 153, 0.4)', '#EC4899', 'Administrar Base');
+    }
 
     // 4 CORNER DOCKS / HELIPADS (Rescue escapes)
     if (currentVehicleId === 'helicoptero' && !hasOwnPizzeria) {
@@ -1206,8 +1262,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     // Render simple vector border overlays or text prompts depending on proximity
     // COMPASS ARROW OVERLAY TO PIZZERIA (If no delivery active) OR SEEDED TARGETS (If delivering!)
     const hasActiveOrders = activeOrders.length > 0;
-    const defaultPizzeriaX = 0;
-    const defaultPizzeriaY = hasOwnPizzeria ? 245 : 0;
+    
+    let defaultPizzeriaX = 0;
+    let defaultPizzeriaY = hasOwnPizzeria ? 245 : 0;
+
+    if (!hasActiveOrders) {
+      if (tutorialStep === 'concesionario') {
+        defaultPizzeriaX = DEALER_X;
+        defaultPizzeriaY = DEALER_Y;
+      } else if (tutorialStep === 'casino') {
+        defaultPizzeriaX = CASINO_X;
+        defaultPizzeriaY = CASINO_Y;
+      } else if (businessTutorialStep === 'upgrades') {
+        defaultPizzeriaX = OWN_PIZZERIA_X;
+        defaultPizzeriaY = OWN_PIZZERIA_Y;
+      }
+    }
+
     const targetX = hasActiveOrders 
       ? (houses.find(h => h.id === activeOrders[0].houseId)?.x || 0) 
       : defaultPizzeriaX;

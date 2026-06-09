@@ -14,6 +14,7 @@ interface ConcesionarioModalProps {
   currentVehicleId: VehicleId;
   money: number;
   onBuyVehicle: (vehicleId: VehicleId, price: number) => void;
+  tutorialStep?: string;
 }
 
 export const VEHICLES_LIST: Vehicle[] = [
@@ -88,6 +89,7 @@ export const ConcesionarioModal: React.FC<ConcesionarioModalProps> = ({
   currentVehicleId,
   money,
   onBuyVehicle,
+  tutorialStep,
 }) => {
   if (!isOpen) return null;
 
@@ -134,6 +136,18 @@ export const ConcesionarioModal: React.FC<ConcesionarioModalProps> = ({
 
         {/* Vehicle list timeline / cards */}
         <div className="p-6 max-h-[500px] overflow-y-auto bg-gray-50 space-y-4">
+          {tutorialStep === 'concesionario' && (
+            <div className="bg-sky-100 text-sky-950 p-4 rounded-2xl border-2 border-sky-300 flex items-center gap-3 animate-pulse">
+              <span className="text-3xl shrink-0">🚲</span>
+              <div className="text-xs">
+                <h4 className="font-extrabold uppercase tracking-wider text-sky-900">Paso 3: Tienda de Vehículos</h4>
+                <p className="mt-1 font-semibold leading-normal">
+                  ¡Excelente trabajo al llegar! Aquí puedes adquirir mejoras de velocidad (patinetas, bicicletas, motos, autos e incluso un helicóptero) que harán que tus entregas sean instantáneas y divertidas. Adquiere alguno si te alcanza el dinero, o simplemente cierra esta ventana para avanzar al <strong className="text-sky-900">Paso 4 (Casino)</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {VEHICLES_LIST.map((vehicle, index) => {
               const isOwned = index <= currentIndex;
