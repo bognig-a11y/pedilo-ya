@@ -9,6 +9,12 @@ import { Upgrades } from '../types';
 import { audio } from '../utils/audio';
 import { RouletteWheel, ROULETTE_ORDER, getRouletteColor } from './RouletteWheel';
 
+const ROULETTE_BET_ROWS = [
+  [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36],
+  [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35],
+  [1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34]
+];
+
 interface CasinoModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -72,7 +78,7 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
   const [slotsResult, setSlotsResult] = useState<string | null>(null);
 
   // Improved Roulette States
-  const [rouletteBet, setRouletteBet] = useState(50);
+  const [rouletteBet, setRouletteBet] = useState(50); // Represents the Chip value being placed
   const [rouletteBetType, setRouletteBetType] = useState<
     'rojo' | 'negro' | 'par' | 'impar' | 'bajo' | 'alto' | 'docena1' | 'docena2' | 'docena3' | 'numero'
   >('rojo');
@@ -81,6 +87,29 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
   const [rouletteRoll, setRouletteRoll] = useState<{ number: number; color: 'rojo' | 'negro' | 'verde' } | null>(null);
   const [rouletteResult, setRouletteResult] = useState<string | null>(null);
   const [animatedTargetNum, setAnimatedTargetNum] = useState<number | null>(null);
+
+  // Advanced Multi-Bet Roulette states
+  const [activeRouletteBets, setActiveRouletteBets] = useState<{
+    id: string;
+    type: 'rojo' | 'negro' | 'par' | 'impar' | 'bajo' | 'alto' | 'docena1' | 'docena2' | 'docena3' | 'numero';
+    amount: number;
+    targetNumber?: number;
+  }[]>([]);
+  const [rouletteHistory, setRouletteHistory] = useState<{ number: number; color: 'rojo' | 'negro' | 'verde' }[]>([
+    { number: 32, color: 'rojo' },
+    { number: 15, color: 'negro' },
+    { number: 19, color: 'rojo' },
+    { number: 4, color: 'negro' },
+    { number: 0, color: 'verde' }
+  ]);
+  const [rouletteDetailedResult, setRouletteDetailedResult] = useState<{
+    winNum: number;
+    winColor: 'rojo' | 'negro' | 'verde';
+    totalBet: number;
+    totalPrize: number;
+    wins: { label: string; bAmount: number; prize: number }[];
+    losses: { label: string; bAmount: number }[];
+  } | null>(null);
 
   // Blackjack States
   const [bjBet, setBjBet] = useState(50);
@@ -94,18 +123,30 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
   // Luck Multiplier
   const luckBoost = upgrades.suerte * 0.025; // max 25% extra probability offset
 
-  // Clean state when changing tabs
+  // Clean state when changing tabs, refunding any bet currently on table
   useEffect(() => {
     setSlotsResult(null);
     setRouletteResult(null);
     setRouletteRoll(null);
     setAnimatedTargetNum(null);
+    setRouletteDetailedResult(null);
     setBjFeedback(null);
     setBjStatus('idle');
+
+    if (activeRouletteBets.length > 0) {
+      const refund = activeRouletteBets.reduce((sum, b) => sum + b.amount, 0);
+      onAddMoney(refund);
+      setActiveRouletteBets([]);
+    }
   }, [activeMode]);
 
   // Handle exiting the entire casino
   const handleExitCasino = () => {
+    if (activeRouletteBets.length > 0) {
+      const refund = activeRouletteBets.reduce((sum, b) => sum + b.amount, 0);
+      onAddMoney(refund);
+      setActiveRouletteBets([]);
+    }
     onClose();
   };
 
@@ -216,27 +257,103 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
     }
   };
 
-  const spinRoulette = () => {
-    if (money < rouletteBet) {
+  const placeRouletteBet = (type: typeof rouletteBetType, targetNum?: number) => {
+    if (isSpinningRoulette) return;
+
+    // Reset previous detailed outcome card to draw attention to new stakes
+    setRouletteDetailedResult(null);
+    setRouletteResult(null);
+
+    // Get amount. If they entered a value, let's look at rouletteBet
+    const requestedAmount = Math.max(1, rouletteBet);
+    const amountToBet = Math.min(money, requestedAmount);
+
+    if (amountToBet <= 0) {
       audio.playFail();
-      setRouletteResult('¡No tienes suficiente dinero!');
+      setRouletteResult('⚠️ ¡No tienes suficiente efectivo para apostar!');
       return;
     }
 
-    onAddMoney(-rouletteBet);
+    // Is there already a bet on this same square/type?
+    const existingIdx = activeRouletteBets.findIndex(b => 
+      b.type === type && (type !== 'numero' || b.targetNumber === targetNum)
+    );
+
+    if (existingIdx > -1) {
+      // Deduct from player money and add to current bet amount
+      onAddMoney(-amountToBet);
+      const updated = [...activeRouletteBets];
+      updated[existingIdx].amount += amountToBet;
+      setActiveRouletteBets(updated);
+      audio.playCasinoCoin();
+    } else {
+      // New bet. Verify maximum of 5 simultaneous bets
+      if (activeRouletteBets.length >= 5) {
+        audio.playFail();
+        setRouletteResult('⚠️ Límite de 5 apuestas simultáneas alcanzado.');
+        return;
+      }
+
+      onAddMoney(-amountToBet);
+      setActiveRouletteBets([
+        ...activeRouletteBets,
+        {
+          id: `${type}-${targetNum ?? ''}-${Date.now()}`,
+          type,
+          amount: amountToBet,
+          targetNumber: targetNum
+        }
+      ]);
+      audio.playCasinoCoin();
+    }
+  };
+
+  const removeRouletteBet = (id: string) => {
+    if (isSpinningRoulette) return;
+    const bet = activeRouletteBets.find(b => b.id === id);
+    if (bet) {
+      onAddMoney(bet.amount); // Refund bet amount back to player wallet
+      setActiveRouletteBets(activeRouletteBets.filter(b => b.id !== id));
+      audio.playCasinoCoin();
+      setRouletteResult(null);
+    }
+  };
+
+  const clearAllRouletteBets = () => {
+    if (isSpinningRoulette) return;
+    if (activeRouletteBets.length > 0) {
+      const refund = activeRouletteBets.reduce((sum, b) => sum + b.amount, 0);
+      onAddMoney(refund);
+      setActiveRouletteBets([]);
+      audio.playCasinoCoin();
+      setRouletteResult('🧹 Tablero de apuestas limpio.');
+      setRouletteDetailedResult(null);
+    }
+  };
+
+  const spinRoulette = () => {
+    if (isSpinningRoulette) return;
+    if (activeRouletteBets.length === 0) {
+      audio.playFail();
+      setRouletteResult('⚠️ No hay apuestas activas. ¡Coloca fichas en el tablero presionando las casillas primero!');
+      return;
+    }
+
     setIsSpinningRoulette(true);
     setRouletteResult(null);
     setRouletteRoll(null);
+    setRouletteDetailedResult(null);
 
     // Calculate winning number immediately
     let finalNumber = Math.floor(Math.random() * 37);
 
-    // Apply luckBoost under the hood!
+    // Apply luckBoost under the hood! Try to make at least one user bet win
     if (Math.random() < luckBoost) {
-      const isWinning = checkRouletteWin(finalNumber, rouletteBetType, rouletteBetNumber);
-      if (!isWinning) {
-        // Search for a winning number that wins for the player!
-        const winningNumbers = ROULETTE_ORDER.filter(n => checkRouletteWin(n, rouletteBetType, rouletteBetNumber));
+      const anyWinning = activeRouletteBets.some(bet => checkRouletteWin(finalNumber, bet.type, bet.targetNumber ?? 0));
+      if (!anyWinning) {
+        const winningNumbers = ROULETTE_ORDER.filter(n => 
+          activeRouletteBets.some(bet => checkRouletteWin(n, bet.type, bet.targetNumber ?? 0))
+        );
         if (winningNumbers.length > 0) {
           finalNumber = winningNumbers[Math.floor(Math.random() * winningNumbers.length)];
         }
@@ -248,41 +365,67 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
 
   const evaluateRouletteValue = (winNum: number) => {
     const winColor = getRouletteColor(winNum);
-    setRouletteRoll({ number: winNum, color: winColor });
+    const outcome = { number: winNum, color: winColor };
+    setRouletteRoll(outcome);
     setIsSpinningRoulette(false);
     setAnimatedTargetNum(null);
 
-    const isWin = checkRouletteWin(winNum, rouletteBetType, rouletteBetNumber);
-    let multiplier = 2; // Default 1 to 1 payout (returns 2x)
-    
-    if (rouletteBetType === 'numero') {
-      multiplier = 36; // 35 to 1 payout (returns 36x)
-    } else if (['docena1', 'docena2', 'docena3'].includes(rouletteBetType)) {
-      multiplier = 3; // 2 to 1 payout (returns 3x)
-    }
+    // Update history, keeping the last 8 outcomes
+    setRouletteHistory(prev => [outcome, ...prev].slice(0, 8));
 
-    if (isWin) {
-      const prize = rouletteBet * multiplier;
-      onAddMoney(prize);
-      audio.playCasinoWin();
-      
+    // Evaluate each placing independently
+    let totalPrizeWon = 0;
+    const winsDetail: { label: string; bAmount: number; prize: number }[] = [];
+    const lossesDetail: { label: string; bAmount: number }[] = [];
+
+    activeRouletteBets.forEach(bet => {
+      const isWin = checkRouletteWin(winNum, bet.type, bet.targetNumber ?? 0);
+      let multiplier = 2; // Default 1:1 pays (2x returned)
+      if (bet.type === 'numero') {
+        multiplier = 36; // 35:1 pays (36x returned)
+      } else if (['docena1', 'docena2', 'docena3'].includes(bet.type)) {
+        multiplier = 3; // 2:1 pays (3x returned)
+      }
+
       let betLabel = '';
-      if (rouletteBetType === 'numero') betLabel = `Número ${rouletteBetNumber}`;
-      else if (rouletteBetType === 'rojo') betLabel = 'Color ROJO';
-      else if (rouletteBetType === 'negro') betLabel = 'Color NEGRO';
-      else if (rouletteBetType === 'par') betLabel = 'Par';
-      else if (rouletteBetType === 'impar') betLabel = 'Impar';
-      else if (rouletteBetType === 'bajo') betLabel = 'Rango Bajo (1-18)';
-      else if (rouletteBetType === 'alto') betLabel = 'Rango Alto (19-36)';
-      else if (rouletteBetType === 'docena1') betLabel = 'Primera Docena (1-12)';
-      else if (rouletteBetType === 'docena2') betLabel = 'Segunda Docena (13-24)';
-      else if (rouletteBetType === 'docena3') betLabel = 'Tercera Docena (25-36)';
+      if (bet.type === 'numero') betLabel = `Número ${bet.targetNumber}`;
+      else if (bet.type === 'rojo') betLabel = 'Rojo 🔴';
+      else if (bet.type === 'negro') betLabel = 'Negro ⚫';
+      else if (bet.type === 'par') betLabel = 'Par 🌗';
+      else if (bet.type === 'impar') betLabel = 'Impar 🌑';
+      else if (bet.type === 'bajo') betLabel = 'Bajo (1-18)';
+      else if (bet.type === 'alto') betLabel = 'Alto (19-36)';
+      else if (bet.type === 'docena1') betLabel = '1ª Docena';
+      else if (bet.type === 'docena2') betLabel = '2ª Docena';
+      else if (bet.type === 'docena3') betLabel = '3ª Docena';
 
-      setRouletteResult(`🎉 ¡Felicidades! Salió ${winColor.toUpperCase()} ${winNum}. Tu apuesta a "${betLabel}" ganó $${prize} (${multiplier - 1}:1)!`);
+      if (isWin) {
+        const prize = bet.amount * multiplier;
+        totalPrizeWon += prize;
+        winsDetail.push({ label: betLabel, bAmount: bet.amount, prize });
+      } else {
+        lossesDetail.push({ label: betLabel, bAmount: bet.amount });
+      }
+    });
+
+    const totalBetsCost = activeRouletteBets.reduce((sum, b) => sum + b.amount, 0);
+
+    // Credit total prizes won
+    if (totalPrizeWon > 0) {
+      onAddMoney(totalPrizeWon);
+      audio.playCasinoWin();
     } else {
       audio.playCasinoLose();
-      setRouletteResult(`😔 Sin éxito esta vez. Cayó ${winColor.toUpperCase()} ${winNum}. Tu apuesta ha perdido.`);
     }
+
+    setRouletteDetailedResult({
+      winNum,
+      winColor,
+      totalBet: totalBetsCost,
+      totalPrize: totalPrizeWon,
+      wins: winsDetail,
+      losses: lossesDetail
+    });
   };
 
 
@@ -583,7 +726,7 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
     <div id="casino-modal-overlay" className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div 
         id="casino-modal-container"
-        className="bg-slate-900 rounded-[32px] shadow-2xl max-w-3xl w-full border-4 border-yellow-400 overflow-hidden text-slate-100 flex flex-col max-h-[92vh] my-4 animate-fade-in"
+        className="bg-slate-900 rounded-[32px] shadow-2xl max-w-4xl w-full border-4 border-yellow-400 overflow-hidden text-slate-100 flex flex-col max-h-[92vh] my-4 animate-fade-in"
       >
         {/* Neon Casino Header */}
         <div className="bg-gradient-to-r from-red-650 via-purple-900 to-amber-700 p-5 flex justify-between items-center border-b-2 border-amber-500">
@@ -698,143 +841,410 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
 
           {/* 1. RULETA VIEW */}
           {activeMode === 'ruleta' && (
-            <div className="space-y-6 max-w-2xl mx-auto text-center">
-              <h3 className="text-base sm:text-lg font-serif text-amber-400 uppercase tracking-wide">Mesa de Ruleta de la Isla</h3>
+            <div className="space-y-4 max-w-4xl mx-auto text-center select-none animate-fade-in">
+              <h3 className="text-sm sm:text-base font-serif text-amber-400 uppercase tracking-wider font-extrabold">Mesa de Ruleta de la Isla</h3>
               
-              {/* Spinner animation look using Canvas component */}
-              <RouletteWheel
-                isSpinning={isSpinningRoulette}
-                targetNumber={animatedTargetNum}
-                onAnimationComplete={evaluateRouletteValue}
-              />
-
-              {/* Bets configuration */}
-              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-4 text-left shadow-lg">
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
-                  <label className="text-xs font-bold text-slate-300">Apuesta por jugada ($):</label>
-                  <div className="flex items-center gap-1.5">
-                    <button 
-                      onClick={() => setRouletteBet(Math.max(10, rouletteBet - 10))}
-                      className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-xs font-black font-mono border border-slate-750"
-                    >
-                      -10
-                    </button>
-                    <span className="font-mono font-bold bg-slate-950 p-1 px-4 rounded text-sm text-yellow-300 border border-slate-800">${rouletteBet}</span>
-                    <button 
-                      onClick={() => setRouletteBet(Math.min(1000, rouletteBet + 15))}
-                      className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2.5 rounded-lg text-xs font-black font-mono border border-slate-750"
-                    >
-                      +15
-                    </button>
-                    <button 
-                      onClick={() => setRouletteBet(Math.min(5000, rouletteBet + 100))}
-                      className="bg-slate-800 hover:bg-slate-700 text-white p-1 px-2 rounded-lg text-[10px] font-black font-mono border border-slate-750"
-                    >
-                      +100
-                    </button>
+              {/* 2-Column Responsive Layout: Side-by-Side on desktop (md), Stacked on mobile */}
+              <div id="roulette-layout-grid" className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch">
+                
+                {/* Left Column: Roulette Wheel Spinner & Bet Control Buttons (Spans 5 cols) */}
+                <div id="roulette-wheel-panel" className="md:col-span-5 flex flex-col justify-between bg-slate-900/60 p-3 rounded-2xl border border-slate-800 shadow-xl gap-2.5">
+                  <div className="flex flex-col items-center">
+                    <RouletteWheel
+                      isSpinning={isSpinningRoulette}
+                      targetNumber={animatedTargetNum}
+                      onAnimationComplete={evaluateRouletteValue}
+                    />
                   </div>
-                </div>
 
-                <hr className="border-slate-800" />
+                  {/* Roulette History Panel */}
+                  <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-850 text-left space-y-1.5 shadow-inner">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-slate-300">Últimos Resultados:</span>
+                      <span className="text-[9px] text-slate-500 font-mono">historial</span>
+                    </div>
+                    {rouletteHistory.length > 0 ? (
+                      <div className="flex gap-2 overflow-x-auto py-1 scrollbar-none">
+                        {rouletteHistory.map((hist, idx) => (
+                          <span
+                            key={idx}
+                            className={`px-2.5 py-1 rounded text-xs font-mono font-black border text-white transition-all transform hover:scale-105 shrink-0 ${
+                              hist.color === 'rojo'
+                                ? 'bg-red-750 border-red-500 shadow-[0_0_5px_rgba(239,68,68,0.2)]'
+                                : hist.color === 'negro'
+                                  ? 'bg-slate-800 border-slate-705'
+                                  : 'bg-green-700 border-green-500'
+                            }`}
+                          >
+                            {hist.number}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] italic text-slate-500">Ningún tiro registrado aún.</p>
+                    )}
+                  </div>
 
-                {/* Bet Types */}
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-300">Selecciona tu categoría de apuesta:</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {[
-                      { id: 'rojo', label: '🔴 Rojo (x2)' },
-                      { id: 'negro', label: '⚫ Negro (x2)' },
-                      { id: 'par', label: '🌗 Par (x2)' },
-                      { id: 'impar', label: '🌑 Impar (x2)' },
-                      { id: 'bajo', label: '📉 Bajo 1-18 (x2)' },
-                      { id: 'alto', label: '📈 Alto 19-36 (x2)' },
-                      { id: 'docena1', label: '📦 1ª Doc 1-12 (x3)' },
-                      { id: 'docena2', label: '📦 2ª Doc 13-24 (x3)' },
-                      { id: 'docena3', label: '📦 3ª Doc 25-36 (x3)' },
-                      { id: 'numero', label: '🔢 Número (x36)' },
-                    ].map(type => (
+                  {/* Bet selector / size adjuster */}
+                  <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-855 text-left space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-350">Valor de tu Ficha:</label>
+                      <span className="text-[10px] text-yellow-405 font-mono">Saldo: ${money}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                      {/* Plus/Minus toggles */}
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setRouletteBet(prev => Math.max(10, prev - 10))}
+                          className="bg-slate-850 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
+                        >
+                          -10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRouletteBet(prev => Math.min(money, prev + 25))}
+                          className="bg-slate-850 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
+                        >
+                          +25
+                        </button>
+                      </div>
+
+                      <div className="relative flex-1 min-w-[70px]">
+                        <span className="absolute left-2.5 top-1.5 text-yellow-500 font-black font-mono text-xs">$</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={money}
+                          value={rouletteBet === 0 ? '' : rouletteBet}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setRouletteBet(Math.min(money, Math.max(0, val)));
+                          }}
+                          className="w-full text-left font-mono font-bold bg-slate-900 p-1.5 pl-6 rounded text-xs text-yellow-300 border border-slate-750 focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
                       <button
-                        key={type.id}
                         type="button"
                         onClick={() => {
-                          setRouletteBetType(type.id as any);
-                          setRouletteResult(null);
+                          setRouletteBet(money);
+                          audio.playCasinoCoin();
                         }}
-                        className={`text-[11px] py-2 px-1 rounded-xl font-bold border transition ${
-                          rouletteBetType === type.id 
-                            ? 'bg-amber-500 text-slate-950 border-white font-extrabold ring-2 ring-yellow-400 scale-[1.03]' 
-                            : 'bg-slate-800 hover:bg-slate-750 border-slate-700 text-slate-200'
-                        }`}
+                        className="bg-purple-900 hover:bg-purple-800 text-yellow-300 border border-purple-600 font-extrabold text-[10px] uppercase px-3 py-1.5 rounded shadow active:scale-95 transition whitespace-nowrap"
                       >
-                        {type.label}
+                        ALL IN
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Number selection grid is visible when 'numero' is selected */}
-                {rouletteBetType === 'numero' && (
-                  <div className="space-y-2 pt-1 animate-fade-in">
-                    <p className="text-xs font-bold text-slate-300">Elige un número de la mesa (Pago 35:1):</p>
-                    {/* The 0 and grid of 1-36 */}
-                    <div className="space-y-1.5 max-w-md mx-auto">
-                      <button
-                        onClick={() => setRouletteBetNumber(0)}
-                        className={`w-full py-2 rounded-xl text-xs font-black transition border ${
-                          rouletteBetNumber === 0
-                            ? 'bg-green-500 border-white text-white font-black shadow-lg ring-2 ring-green-300 scale-[1.02]'
-                            : 'bg-green-950 hover:bg-green-800 border-green-700 text-green-300'
-                        }`}
-                      >
-                        🟢 NÚMERO CERO (0)
-                      </button>
-                      <div className="grid grid-cols-6 gap-1">
-                        {Array.from({ length: 36 }, (_, idx) => {
-                          const num = idx + 1;
-                          const color = getRouletteColor(num);
-                          const isSelected = rouletteBetNumber === num;
-                          return (
-                            <button
-                              key={num}
-                              onClick={() => setRouletteBetNumber(num)}
-                              className={`py-1.5 rounded-lg text-xs font-bold transition border ${
-                                isSelected
-                                  ? 'bg-amber-400 text-slate-950 font-black border-white ring-2 ring-yellow-400 scale-105 shadow'
-                                  : color === 'rojo'
-                                    ? 'bg-red-800 hover:bg-red-700 border-red-650 text-white'
-                                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-                              }`}
-                            >
-                              {num}
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Feedback text */}
-              {rouletteResult && (
-                <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold text-amber-300 font-mono text-center shadow">
-                  {rouletteResult}
+                  {/* Feedback and Results */}
+                  <div className="space-y-2">
+                    {rouletteResult ? (
+                      <div className="bg-slate-950 border-2 border-amber-500/40 p-2 rounded-lg text-[11px] font-bold text-amber-300 font-mono text-center shadow animate-fade-in animate-pulse">
+                        {rouletteResult}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950/50 border border-slate-850 p-2 rounded-lg text-[10px] text-slate-400 font-medium text-center italic">
+                        Toca una casilla del tablero a la derecha para apostar y gira la rueda.
+                      </div>
+                    )}
+
+                    <button
+                      id="spin-roulette-btn"
+                      disabled={isSpinningRoulette}
+                      onClick={spinRoulette}
+                      className={`w-full py-2.5 rounded-xl font-black tracking-wider text-[11px] transition duration-200 border uppercase ${
+                        isSpinningRoulette 
+                          ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed' 
+                          : 'bg-gradient-to-r from-red-650 to-amber-600 hover:brightness-110 text-white border-red-500 hover:shadow-lg transform active:scale-95'
+                      }`}
+                    >
+                      {isSpinningRoulette ? '¡Bolilla girando...!' : '🔴 GIRAR Y APUESTAR 🔴'}
+                    </button>
+                  </div>
                 </div>
-              )}
+                  {/* Right Column: Full Interactive Felt Board (Spans 7 cols) */}
+                <div id="roulette-board-panel" className="md:col-span-7 flex flex-col justify-between bg-slate-900/60 p-3 rounded-2xl border border-slate-800 shadow-xl gap-3">
+                  <div className="space-y-2.5">
+                    {/* Active Bet Summary Header */}
+                    <div className="flex justify-between items-center border-b border-slate-850 bg-slate-950 p-2 rounded-lg">
+                      <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">Tablero de Apuestas</span>
+                      <div className="text-[10px] font-mono font-bold text-slate-305 flex items-center gap-1.5">
+                        <span>Ficha:</span>
+                        <strong className="text-yellow-350 bg-slate-900 px-1.5 py-0.5 rounded">${rouletteBet}</strong>
+                      </div>
+                    </div>
 
-              {/* Spin command */}
-              <button
-                id="spin-roulette-btn"
-                disabled={isSpinningRoulette}
-                onClick={spinRoulette}
-                className={`w-full py-3.5 rounded-2xl font-black tracking-wider text-sm transition-all border ${
-                  isSpinningRoulette 
-                    ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-red-600 to-amber-600 hover:brightness-110 text-white border-red-500 hover:shadow-lg transform active:scale-95'
-                }`}
-              >
-                {isSpinningRoulette ? '¡Bolilla en órbita descendente!' : '🔴 HACER GIRAR RULETA (APUESTAR) 🔴'}
-              </button>
+                    {/* Detailed Result Card from last turn if settled */}
+                    {rouletteDetailedResult && (
+                      <div className="bg-slate-950/95 border-2 border-yellow-400 p-3 rounded-2xl text-left space-y-2 animate-fade-in text-xs shadow-[0_0_15px_rgba(234,179,8,0.15)] relative">
+                        <button 
+                          onClick={() => setRouletteDetailedResult(null)}
+                          className="absolute top-2 right-2 text-slate-400 hover:text-white"
+                          title="Cerrar resultado"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                        
+                        <div className="flex justify-between items-center border-b border-slate-850 pb-1.5">
+                          <span className="font-serif font-black text-[10px] uppercase tracking-wider text-amber-300">
+                            RESULTADO DE LA TIRADA
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded font-mono font-black text-xs text-white ${
+                            rouletteDetailedResult.winColor === 'rojo'
+                              ? 'bg-red-700'
+                              : rouletteDetailedResult.winColor === 'negro'
+                                ? 'bg-slate-800'
+                                : 'bg-green-700'
+                          }`}>
+                            Ganó el {rouletteDetailedResult.winNum} {rouletteDetailedResult.winColor.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 font-mono text-[11px]">
+                          {rouletteDetailedResult.wins.length > 0 && (
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] text-green-400 font-black tracking-wider uppercase block">Apuestas Ganadoras:</span>
+                              {rouletteDetailedResult.wins.map((w, idx) => (
+                                <div key={idx} className="flex justify-between text-green-300 font-bold">
+                                  <span>🟢 {w.label} (${w.bAmount})</span>
+                                  <span>+${w.prize}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {rouletteDetailedResult.losses.length > 0 && (
+                            <div className="space-y-0.5 pt-1 border-t border-slate-850">
+                              <span className="text-[9px] text-red-400 font-black tracking-wider uppercase block">Apuestas Perdedoras:</span>
+                              {rouletteDetailedResult.losses.map((l, idx) => (
+                                <div key={idx} className="flex justify-between text-slate-450">
+                                  <span>🔴 {l.label} (${l.bAmount})</span>
+                                  <span>-${l.bAmount}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 font-serif font-black text-[11px] text-yellow-300">
+                          <span>Apostado: ${rouletteDetailedResult.totalBet}</span>
+                          <span className={rouletteDetailedResult.totalPrize >= rouletteDetailedResult.totalBet ? 'text-green-400' : 'text-red-400'}>
+                            {rouletteDetailedResult.totalPrize >= rouletteDetailedResult.totalBet 
+                              ? `Ganancia Total: +$${rouletteDetailedResult.totalPrize}`
+                              : `Pérdida Total: -$${rouletteDetailedResult.totalBet - rouletteDetailedResult.totalPrize}`
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Helper to evaluate chip overlays */}
+                    {(() => {
+                      const getBetAmountOn = (type: string, targetNum?: number): number => {
+                        const found = activeRouletteBets.find(b => b.type === type && (type !== 'numero' || b.targetNumber === targetNum));
+                        return found ? found.amount : 0;
+                      };
+
+                      return (
+                        <>
+                          {/* Full Felt Layout representation */}
+                          <div className="bg-emerald-950/40 p-2 rounded-xl border border-emerald-500/20 shadow-inner flex flex-row overflow-x-auto select-none items-stretch">
+                            
+                            {/* Column with Number 0 (Green box) */}
+                            <div className="flex flex-col justify-stretch mr-1">
+                              {(() => {
+                                const amount = getBetAmountOn('numero', 0);
+                                const isWinningCell = rouletteRoll?.number === 0;
+
+                                return (
+                                  <button
+                                    id="bet-number-0"
+                                    type="button"
+                                    onClick={() => placeRouletteBet('numero', 0)}
+                                    className={`relative flex flex-col justify-center items-center rounded-lg font-black font-mono transition border shadow-md cursor-pointer h-full px-2.5 sm:px-3 text-xs min-w-[36px] ${
+                                      isWinningCell
+                                        ? 'bg-yellow-400 text-slate-950 font-black border-white ring-4 ring-yellow-300 scale-105 z-20 shadow-[0_0_15px_rgba(250,204,21,1)] animate-pulse'
+                                        : 'bg-green-905 hover:bg-green-800 border-green-700 text-green-350'
+                                    }`}
+                                  >
+                                    <span>0</span>
+                                    {amount > 0 && (
+                                      <span className="absolute -top-1.5 -right-1.5 bg-yellow-450 text-slate-955 font-mono text-[9px] px-1 py-0.5 rounded-full font-black border border-white animate-pulse shadow-md z-30">
+                                        ${amount}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+
+                            {/* Columns with Numbers 1-36 */}
+                            <div className="flex-1 flex flex-col gap-1 min-w-[320px]">
+                              {ROULETTE_BET_ROWS.map((rowArr, rowIndex) => (
+                                <div key={rowIndex} className="grid grid-cols-12 gap-1 flex-1">
+                                  {rowArr.map((num) => {
+                                    const color = getRouletteColor(num);
+                                    const amount = getBetAmountOn('numero', num);
+                                    const isWinningCell = rouletteRoll?.number === num;
+
+                                    return (
+                                      <button
+                                        id={`bet-number-${num}`}
+                                        key={num}
+                                        type="button"
+                                        onClick={() => placeRouletteBet('numero', num)}
+                                        className={`relative h-7 sm:h-8 font-mono text-[10px] sm:text-xs font-bold rounded transition border flex items-center justify-center ${
+                                          isWinningCell
+                                            ? 'bg-yellow-400 text-slate-950 font-black border-white ring-4 ring-yellow-300 scale-105 z-20 shadow-[0_0_15px_rgba(250,204,21,1)] animate-pulse'
+                                            : color === 'rojo'
+                                              ? 'bg-red-855 hover:bg-red-750 border-red-755 text-white shadow-xs'
+                                              : 'bg-slate-800 hover:bg-slate-750 border-slate-700 text-slate-100 shadow-xs'
+                                        }`}
+                                      >
+                                        {num}
+                                        {amount > 0 && (
+                                          <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-slate-950 font-mono text-[9px] px-1 py-0.5 rounded-full font-black border border-white animate-pulse shadow-md z-30">
+                                            ${amount}
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Docenas Selector Section */}
+                          <div className="grid grid-cols-3 gap-1 px-0.5">
+                            {[
+                              { id: 'docena1', label: '1ª Docena (1-12)' },
+                              { id: 'docena2', label: '2ª Docena (13-24)' },
+                              { id: 'docena3', label: '3ª Docena (25-36)' },
+                            ].map((item) => {
+                              const amount = getBetAmountOn(item.id);
+                              return (
+                                <button
+                                  id={`bet-${item.id}`}
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => placeRouletteBet(item.id as any)}
+                                  className={`relative py-1.5 text-[9px] sm:text-[10px] font-bold leading-normal rounded-lg border transition ${
+                                    amount > 0
+                                      ? 'bg-amber-500 text-slate-955 border-white font-extrabold ring-2 ring-yellow-300 scale-[1.01] shadow-md font-black'
+                                      : 'bg-slate-850 hover:bg-slate-800 border-slate-750 text-slate-350 shadow-sm'
+                                  }`}
+                                >
+                                  {item.label}
+                                  {amount > 0 && (
+                                    <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-slate-955 font-mono text-[9px] px-1 py-0.5 rounded-full font-black border border-white animate-pulse shadow-md z-30">
+                                      ${amount}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Quick bets grouped section */}
+                          <div className="grid grid-cols-6 gap-1 px-0.5 pt-0.5">
+                            {[
+                              { id: 'bajo', label: '1-18' },
+                              { id: 'par', label: 'Par' },
+                              { id: 'rojo', label: 'Rojo', bg: 'bg-red-850 hover:bg-red-750 border-red-700 text-white font-black' },
+                              { id: 'negro', label: 'Negro', bg: 'bg-slate-800 hover:bg-slate-750 border-slate-705 text-slate-100 font-black' },
+                              { id: 'impar', label: 'Impar' },
+                              { id: 'alto', label: '19-36' },
+                            ].map((item) => {
+                              const amount = getBetAmountOn(item.id);
+                              let btnStyle = item.bg || 'bg-slate-850 hover:bg-slate-800 border-slate-755 text-slate-300 shadow-sm';
+                              if (amount > 0) {
+                                btnStyle = 'bg-amber-500 text-slate-955 border-white font-extrabold ring-2 ring-yellow-305 scale-[1.01] shadow-md font-black';
+                              }
+                              return (
+                                <button
+                                  id={`bet-${item.id}`}
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => placeRouletteBet(item.id as any)}
+                                  className={`relative py-1.5 text-[9px] sm:text-[10px] font-bold rounded-lg border transition text-center flex items-center justify-center ${btnStyle}`}
+                                >
+                                  {item.label === 'Rojo' ? '🔴 Rojo' : item.label === 'Negro' ? '⚫ Negro' : item.label}
+                                  {amount > 0 && (
+                                    <span className="absolute -top-1.5 -right-1.5 bg-yellow-450 text-slate-955 font-mono text-[9px] px-1 py-0.5 rounded-full font-black border border-white animate-pulse shadow-md z-30">
+                                      ${amount}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {/* Active Bets Layout Interface (Cancellations and Summary) */}
+                    <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-850 text-left space-y-2">
+                      <div className="flex justify-between items-center pb-1 border-b border-slate-850">
+                        <span className="text-[10px] uppercase font-black text-slate-300">Apuestas Activas de la Ronda:</span>
+                        {activeRouletteBets.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllRouletteBets}
+                            className="text-[9px] text-red-400 hover:text-red-300 font-black bg-red-950/40 border border-red-900 px-2 py-0.5 rounded flex items-center gap-1 active:scale-95 transition"
+                          >
+                            🧹 Limpiar apuestas
+                          </button>
+                        )}
+                      </div>
+
+                      {activeRouletteBets.length > 0 ? (
+                        <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                          {activeRouletteBets.map((b) => {
+                            let label = b.type.toUpperCase();
+                            if (b.type === 'numero') label = `NÚMERO ${b.targetNumber}`;
+                            else if (b.type === 'docena1') label = '1ª DOCENA';
+                            else if (b.type === 'docena2') label = '2ª DOCENA';
+                            else if (b.type === 'docena3') label = '3ª DOCENA';
+
+                            return (
+                              <div key={b.id} className="flex justify-between items-center text-[10px] bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-yellow-405 font-bold font-mono">${b.amount}</span>
+                                  <span className="text-slate-350 font-mono">en {label}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeRouletteBet(b.id)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-slate-800 p-0.5 rounded transition"
+                                  title="Quitar apuesta"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                          <div className="text-[11px] pt-1.5 font-bold border-t border-slate-850 text-slate-300 flex justify-between">
+                            <span>Total Apostado:</span>
+                            <span className="text-yellow-400 font-mono">${activeRouletteBets.reduce((sum, b) => sum + b.amount, 0)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10.5px] italic text-slate-500 text-center py-1">Haz clic sobre las opciones del tablero verde para añadir posiciones.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Useful layout footer description */}
+                  <p className="text-[10px] text-slate-400 font-medium leading-tight bg-slate-950/20 p-2 rounded-xl text-center">
+                    ℹ️ <strong className="text-amber-400/95">Cuotas de Pago:</strong> Número: <strong className="text-white">35 a 1</strong> • Docena: <strong className="text-white">2 a 1 (x3)</strong> • Suertes Sencillas: <strong className="text-white">1 a 1 (x2)</strong>.
+                  </p>
+                </div>
+
+              </div>
             </div>
           )}
 
@@ -863,25 +1273,58 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
               </div>
 
               {/* Bet Controls */}
-              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center text-left">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold block uppercase font-mono leading-none mb-1">Apuesta por palanca</span>
-                  <p className="text-sm font-black font-mono text-yellow-300 leading-none">${slotBet}</p>
+              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3 text-left">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase font-mono leading-none">Monto de Apuesta (Slots)</span>
+                  <div className="text-xs text-slate-400">
+                    Saldo: <strong className="text-yellow-400 font-mono">${money}</strong>
+                  </div>
                 </div>
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {[20, 50, 100, 200, 500].map(val => (
+
+                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                  {/* Plus/Minus toggles */}
+                  <div className="flex gap-1 shrink-0">
                     <button
-                      key={val}
-                      onClick={() => setSlotBet(val)}
-                      className={`px-2.5 py-1.5 rounded-lg font-mono text-[10px] sm:text-xs font-bold transition border ${
-                        slotBet === val 
-                          ? 'bg-amber-500 text-slate-950 border-white' 
-                          : 'bg-slate-800 text-slate-350 border-slate-700 hover:bg-slate-700'
-                      }`}
+                      type="button"
+                      onClick={() => setSlotBet(prev => Math.max(1, prev - 10))}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
                     >
-                      ${val}
+                      -10
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setSlotBet(prev => Math.min(money, prev + 25))}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
+                    >
+                      +25
+                    </button>
+                  </div>
+
+                  <div className="relative flex-1 min-w-[70px]">
+                    <span className="absolute left-2.5 top-1.5 text-yellow-500 font-black font-mono text-xs">$</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={money}
+                      value={slotBet === 0 ? '' : slotBet}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        setSlotBet(Math.min(money, Math.max(0, val)));
+                      }}
+                      className="w-full text-left font-mono font-bold bg-slate-950 p-1.5 pl-5 rounded text-xs text-yellow-300 border border-slate-750 focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSlotBet(money);
+                      audio.playCasinoCoin();
+                    }}
+                    className="bg-purple-900 hover:bg-purple-800 text-yellow-300 border border-purple-600 font-extrabold text-[10px] uppercase px-3 py-1.5 rounded shadow active:scale-95 transition"
+                  >
+                    ALL IN
+                  </button>
                 </div>
               </div>
 
@@ -930,22 +1373,55 @@ export const CasinoModal: React.FC<CasinoModalProps> = ({
                     <p className="text-xs text-slate-400 mt-1">El crupier reparte 2 cartas. El pago regular es 1:1, y si logras 21 directo paga 3:2.</p>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-950/80 p-3 rounded-2xl border border-slate-850">
-                    <span className="text-xs font-extrabold text-slate-300">Cantidad ($):</span>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[10, 20, 50, 100, 200, 500].map(val => (
+                  <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-850 space-y-3 text-left">
+                    <div className="flex justify-between items-center text-xs font-extrabold text-slate-300">
+                      <span>Monto de Apuesta (Blackjack)</span>
+                      <span>Saldo: <strong className="text-yellow-400 font-mono">${money}</strong></span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                      <div className="flex gap-1 shrink-0">
                         <button
-                          key={val}
-                          onClick={() => setBjBet(val)}
-                          className={`px-3 py-1.5 rounded-lg border font-mono text-xs font-bold transition ${
-                            bjBet === val
-                              ? 'bg-emerald-500 border-white text-slate-950 shadow-md scale-105'
-                              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
-                          }`}
+                          type="button"
+                          onClick={() => setBjBet(prev => Math.max(1, prev - 10))}
+                          className="bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
                         >
-                          ${val}
+                          -10
                         </button>
-                      ))}
+                        <button
+                          type="button"
+                          onClick={() => setBjBet(prev => Math.min(money, prev + 25))}
+                          className="bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold text-xs px-2 py-1.5 rounded border border-slate-700 active:scale-95"
+                        >
+                          +25
+                        </button>
+                      </div>
+
+                      <div className="relative flex-1 min-w-[70px]">
+                        <span className="absolute left-2.5 top-1.5 text-yellow-500 font-black font-mono text-xs">$</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={money}
+                          value={bjBet === 0 ? '' : bjBet}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setBjBet(Math.min(money, Math.max(0, val)));
+                          }}
+                          className="w-full text-left font-mono font-bold bg-slate-900 p-1.5 pl-5 rounded text-xs text-yellow-300 border border-slate-750 focus:border-amber-450 focus:outline-none"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBjBet(money);
+                          audio.playCasinoCoin();
+                        }}
+                        className="bg-purple-900 hover:bg-purple-800 text-yellow-300 border border-purple-600 font-extrabold text-[10px] uppercase px-3 py-1.5 rounded shadow active:scale-95 transition"
+                      >
+                        ALL IN
+                      </button>
                     </div>
                   </div>
 

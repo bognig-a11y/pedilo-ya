@@ -291,13 +291,13 @@ export const RouletteWheel: React.FC<RouletteWheelProps> = ({
   }, [onAnimationComplete]);
 
   return (
-    <div className="relative inline-block mx-auto min-h-[250px] w-full flex items-center justify-center p-2">
+    <div className="relative inline-block mx-auto min-h-[210px] w-full flex items-center justify-center p-1">
       <div className="absolute inset-0 bg-yellow-500/5 filter blur-2xl rounded-full pointer-events-none" />
       <canvas
         ref={canvasRef}
         width={270}
         height={270}
-        className="w-[270px] h-[270px] rounded-full shadow-2xl relative z-10 select-none border border-amber-500/25 bg-slate-950/80 p-0.5"
+        className="w-[200px] h-[200px] rounded-full shadow-2xl relative z-10 select-none border border-amber-500/25 bg-slate-950/80 p-0.5"
       />
     </div>
   );
