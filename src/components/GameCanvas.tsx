@@ -1362,10 +1362,43 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Distance and Compass Direction calculations
   const activeOrder = activeOrders && activeOrders[0];
   const targetHouse = activeOrder ? houses.find(h => h.id === activeOrder.houseId) : null;
-  const defaultPizzaX = 0;
-  const defaultPizzaY = hasOwnPizzeria ? 245 : 0;
-  const targetX = targetHouse ? targetHouse.x : defaultPizzaX;
-  const targetY = targetHouse ? targetHouse.y : defaultPizzaY;
+
+  let targetX = 0;
+  let targetY = hasOwnPizzeria ? 245 : 0;
+  let targetLabel = hasOwnPizzeria ? 'Base Propia' : 'Pizzería';
+  let targetSub = hasOwnPizzeria ? 'Ir a Base' : 'Ir a Pizzería';
+
+  if (tutorialStep === 'pizzeria') {
+    targetX = 0;
+    targetY = 0;
+    targetLabel = 'Pizzería Central';
+    targetSub = 'TOMAR PEDIDO [0, 0]';
+  } else if (tutorialStep === 'delivery' && targetHouse) {
+    targetX = targetHouse.x;
+    targetY = targetHouse.y;
+    targetLabel = `Casa ${targetHouse.number}`;
+    targetSub = 'ENTREGAR PEDIDO';
+  } else if (tutorialStep === 'concesionario') {
+    targetX = -245; // DEALER_X
+    targetY = 0;    // DEALER_Y
+    targetLabel = 'Tienda Vehículos';
+    targetSub = 'MEJORAR VELOCIDAD';
+  } else if (tutorialStep === 'casino') {
+    targetX = 245;  // CASINO_X
+    targetY = 0;    // CASINO_Y
+    targetLabel = 'Casino de la Isla';
+    targetSub = 'COMPLETAR TUTORIAL';
+  } else if (businessTutorialStep === 'upgrades') {
+    targetX = 0;    // OWN_PIZZERIA_X
+    targetY = 245;  // OWN_PIZZERIA_Y
+    targetLabel = 'Base Administrativa';
+    targetSub = 'MEJORAS E IMPERIO';
+  } else if (targetHouse) {
+    targetX = targetHouse.x;
+    targetY = targetHouse.y;
+    targetLabel = `Casa ${targetHouse.number}`;
+    targetSub = 'ENTREGAR PEDIDO';
+  }
 
   const distDx = targetX - playerX;
   const distDy = targetY - playerY;
@@ -1384,7 +1417,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       />
 
       {/* COMPASS OVERLAY (Top-Left) */}
-      <div className="absolute top-4 left-4 bg-slate-950/85 backdrop-blur-md border-[3px] border-amber-400 p-2.5 rounded-2xl flex items-center gap-2.5 shadow-2xl z-30 pointer-events-none select-none">
+      <div className="absolute top-4 left-4 bg-slate-950/90 backdrop-blur-md border-[3px] border-amber-400 p-2.5 rounded-2xl flex items-center gap-2.5 shadow-2xl z-30 pointer-events-none select-none animate-pulse">
         <div className="relative w-11 h-11 rounded-full border-2 border-slate-700 bg-slate-900 flex items-center justify-center shrink-0">
           <span className="absolute top-0.5 text-[6px] text-slate-500 font-extrabold font-mono">N</span>
           <span className="absolute bottom-0.5 text-[6px] text-slate-500 font-extrabold font-mono">S</span>
@@ -1403,12 +1436,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
         
         <div className="text-left font-sans text-xs">
-          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Dirección</p>
-          <p className="font-black text-amber-300 truncate max-w-[110px] leading-tight text-xs uppercase font-serif">
-            {targetHouse ? `Casa ${targetHouse.number}` : (hasOwnPizzeria ? 'Base Propia' : 'Pizzería')}
+          <p className="text-[8px] text-amber-500 font-black uppercase tracking-wider">OBJETIVO</p>
+          <p className="font-black text-white truncate max-w-[125px] leading-none text-xs uppercase font-sans mt-0.5">
+            {targetLabel}
           </p>
-          <p className="text-[9px] text-slate-200 font-mono font-medium leading-normal shrink-0">
-            {targetHouse ? 'Destino' : (hasOwnPizzeria ? 'Ir a Base' : 'Ir a Pizzería')}
+          <p className="text-[9px] text-amber-400 font-mono font-black mt-0.5 leading-none shrink-0 uppercase tracking-tight">
+            {targetSub}
           </p>
         </div>
       </div>

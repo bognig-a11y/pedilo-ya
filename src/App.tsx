@@ -1836,6 +1836,128 @@ export default function App() {
         {gameState === 'playing' && (
           <div className="relative w-full h-full flex flex-col items-center">
             
+            {/* HIGH VISIBILITY GUIDED TUTORIAL BANNER */}
+            {tutorialStep !== 'off' && tutorialStep !== 'completed' && (
+              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-amber-500 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
+                {/* Background neon glow */}
+                <div className="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/20 rounded-full blur-xl pointer-events-none" />
+                
+                <div className="flex items-start gap-3.5 relative">
+                  <span className="text-3 shadow shrink-0 mt-0.5 select-none text-2xl">🎓</span>
+                  <div className="flex-1 text-left space-y-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <h4 className="font-sans font-black text-amber-500 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                        <span>Guía de Iniciación</span>
+                        <span className="bg-amber-500 text-slate-950 text-[9px] font-mono font-black px-2 py-0.5 rounded-full select-none leading-none">
+                          {tutorialStep === 'pizzeria' && 'PASO 1 / 4'}
+                          {tutorialStep === 'delivery' && 'PASO 2 / 4'}
+                          {tutorialStep === 'concesionario' && 'PASO 3 / 4'}
+                          {tutorialStep === 'casino' && 'PASO 4 / 4'}
+                        </span>
+                      </h4>
+                      <button
+                        onClick={() => {
+                          setTutorialStep('off');
+                          localStorage.setItem('tutorial_shown', 'true');
+                          audio.playRentPay();
+                          alertBanner("🏁 Comienzo normal: ¡Suerte en la isla del delivery!");
+                        }}
+                        className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
+                      >
+                        Omitir tutorial ✕
+                      </button>
+                    </div>
+
+                    <div className="text-slate-100 text-[11px] sm:text-[12px] leading-relaxed font-bold tracking-tight">
+                      {tutorialStep === 'pizzeria' && (
+                        <span>
+                          <strong>ENTRAR A LA PIZZERÍA [0, 0]</strong>: Dirígete al centro exacto del mapa. Busca la columna de <span className="text-amber-400 underline font-black">luz celestial dorada</span> que parpadea. Presiona <kbd className="bg-slate-800 text-white p-1 rounded font-mono text-[9px] uppercase border border-slate-600 font-bold">Espacio</kbd> o acércate para entrar y <span className="text-amber-300 font-black">Aceptar tu primer pedido</span>.
+                        </span>
+                      )}
+                      {tutorialStep === 'delivery' && (
+                        <span>
+                          <strong>COMPLETAR EL ENVÍO</strong>: ¡Tienes una pizza fresca en tu mochila! Sigue la aguja de la <span className="text-amber-400 font-extrabold">brújula arriba a la izquierda</span> o la columna de <span className="text-emerald-400 font-black underline">luz verde celestial</span> para ubicar la casa objetivo y acércate para entregarla. ¡Estás a salvo de penalizaciones de tiempo!
+                        </span>
+                      )}
+                      {tutorialStep === 'concesionario' && (
+                        <span>
+                          <strong>IR AL CONCESIONARIO EN [-245, 0] 🚲</strong>: ¡Felicidades por cobrar tu primer envío! Para comprar vehículos y mejorar tu velocidad, camina en línea recta hacia la <span className="text-sky-400 font-black underline">IZQUIERDA</span> del mapa. Busca la tienda celeste y la enorme <span className="text-sky-400 font-black">columna de luz azul cielo</span>.
+                        </span>
+                      )}
+                      {tutorialStep === 'casino' && (
+                        <span>
+                          <strong>IR AL CASINO DE LA ISLA EN [245, 0] 🎰</strong>: ¡Grandioso! El paso final es visitar el Casino en el extremo <span className="text-purple-400 font-black underline">DERECHO</span> de la isla. Sigue la brújula y busca el gran pilar de <span className="text-purple-400 font-black">luz violeta brillante</span>. ¡Entra allí para finalizar tu entrenamiento!
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Navigation assistance */}
+                    <div className="text-[10px] bg-slate-900 border border-slate-800 p-2 text-slate-300 rounded-xl leading-normal shrink-0">
+                      <p className="font-black text-[9px] text-amber-500 uppercase tracking-wide">🗺️ Indicaciones detalladas para llegar:</p>
+                      <p className="font-semibold text-slate-400 mt-0.5">
+                        {tutorialStep === 'pizzeria' && '📍 Camina hacia el centro de la pantalla hasta pararte sobre el círculo dorado resplandeciente.'}
+                        {tutorialStep === 'delivery' && '📍 La brújula (arriba izq.) indica la dirección hacia la casa de entrega. El indicador rosa abajo te marca la distancia en metros.'}
+                        {tutorialStep === 'concesionario' && '📍 Camina directamente hacia el carril IZQUIERDO desde el centro. El concesionario de vehículos tiene un pilar de luz azul intenso.'}
+                        {tutorialStep === 'casino' && '📍 Camina directamente hacia el carril DERECHO desde el centro. El casino tiene un pilar de luz violeta parpadeante.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* HIGH VISIBILITY BUSINESS TUTORIAL BANNER */}
+            {businessTutorialStep !== 'off' && businessTutorialStep !== 'completed' && (
+              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-pink-500 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
+                <div className="absolute -top-12 -right-12 w-24 h-24 bg-pink-500/20 rounded-full blur-xl pointer-events-none" />
+                
+                <div className="flex items-start gap-3.5 relative">
+                  <span className="text-3 shadow shrink-0 mt-0.5 select-none text-2xl">🏢</span>
+                  <div className="flex-1 text-left space-y-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <h4 className="font-sans font-black text-pink-400 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                        <span>Imperio Pizzería</span>
+                        <span className="bg-pink-500 text-white text-[9px] font-mono font-black px-2 py-0.5 rounded-full select-none leading-none">
+                          {businessTutorialStep === 'upgrades' && 'PASO 1 / 3'}
+                          {businessTutorialStep === 'competition' && 'PASO 2 / 3'}
+                          {businessTutorialStep === 'staff' && 'PASO 3 / 3'}
+                        </span>
+                      </h4>
+                      <button
+                        onClick={() => {
+                          setBusinessTutorialStep('off');
+                          localStorage.setItem('business_shown', 'true');
+                          audio.playRentPay();
+                          alertBanner("💼 ¡Suerte construyendo tu imperio de la pizza!");
+                        }}
+                        className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
+                      >
+                        Omitir guía ✕
+                      </button>
+                    </div>
+
+                    <div className="text-slate-100 text-[11px] sm:text-[12px] leading-relaxed font-bold tracking-tight">
+                      {businessTutorialStep === 'upgrades' && (
+                        <span>
+                          <strong>INGRESA A TU BASE EN EL SUR [0, 245]</strong>: Dirígete al <span className="text-pink-400 font-extrabold underline">SUR de la isla</span> guiándote por el pilar de luz rosa. Abre la consola de administración tocando <kbd className="bg-slate-800 text-white p-1 rounded font-mono text-[9px] uppercase border border-slate-600 font-bold">Espacio</kbd> para activar las mejoras de cocina y renovar el edificio dilapidated.
+                        </span>
+                      )}
+                      {businessTutorialStep === 'competition' && (
+                        <span>
+                          <strong>LA BARRA DE PARTICIPACIÓN</strong>: En la barra de arriba puedes observar la <span className="text-pink-400 font-extrabold">Barra de Competencia</span>. El rival intentará acaparar tu clientela (+rate/min). Si tu barra llega a 0%, perderás. ¡Debes mantener la marca viva haciendo entregas o contratando personal!
+                        </span>
+                      )}
+                      {businessTutorialStep === 'staff' && (
+                        <span>
+                          <strong>CONTRATAR REPARTIDORES AUTÓNOMOS</strong>: Abre la consola en tu Base, ve a la pestaña <span className="text-pink-400 font-extrabold">"EMPLEADOS"</span> y contrata a tu primer delivery automático. ¡Ellos defenderán tu participación de mercado sin que tengas que manejar!
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Top orders instructions HUD */}
             <div className="w-full max-w-xl bg-white/95 border-2 border-yellow-400 rounded-2xl p-3 px-5 shadow mb-4 flex justify-between items-center text-xs font-bold text-gray-800 z-30">
               {activeOrders.length > 0 ? (
