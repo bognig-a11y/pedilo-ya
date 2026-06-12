@@ -75,7 +75,7 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'pedidos' | 'renovacion' | 'empleados'>('pedidos');
 
-  // Automatically adjust active business tab based on tutorial progress to keep the flow extremely intuitive
+  // Automatically adjust active business tab based on tutorial progress to keep the flow intuitive
   React.useEffect(() => {
     if (isOpen) {
       if (businessTutorialStep === 'upgrades') {
@@ -98,24 +98,24 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 1,
       cost: 10000,
       title: 'Reparación Estructural',
-      desc: 'Soluciona muros agrietados, reemplaza los cristales rotos de la fachada e instala un cartel corporativo luminoso.',
-      benefit: 'Los pedidos manuales pagan ahora el 100% de su valor (antes pagaban el 50% por la apariencia dilapidada).',
+      desc: 'Soluciona muros agrietados y pon un cartel corporativo luminoso.',
+      benefit: 'Los pedidos pagan el 100% de su valor (sin penalización por aspecto deteriorado).',
       icon: Hammer,
     },
     {
       level: 2,
       cost: 20000,
       title: 'Apertura Comercial',
-      desc: 'Equipa la cocina con hornos profesionales, abre las puertas al público de la isla e inicia campañas de marketing local.',
-      benefit: 'Los pedidos aumentan en +1.0% la competencia (en lugar del +0.2%). El porcentaje se redondea al entero más cercano tras el primer pedido.',
+      desc: 'Hornos profesionales e inicio de campañas de marketing local.',
+      benefit: 'Tus pedidos manuales aumentan mucho más tu cuota de mercado al entregarlos (+1%).',
       icon: Sparkles,
     },
     {
       level: 3,
       cost: 30000,
       title: 'Negocio Operativo',
-      desc: 'Centraliza un panel automatizado de pedidos y habilita la red logística de despacho rápido.',
-      benefit: 'Cada 30s de juego: Obtienes +2.0% de participación de mercado y +$200 de ingreso automático. ¡Desbloquea el panel de Empleados!',
+      desc: 'Panel automatizado y red para habilitar personal e ingresos automáticos.',
+      benefit: 'Ingresos automáticos pasivos (+$200 y +2% de mercado cada 30s) y desbloquea pestaña de Personal.',
       icon: TrendingUp,
     }
   ];
@@ -126,7 +126,7 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 1,
       cost: 3000,
       name: 'Repartidor Novato',
-      benefit: 'Cada 30 Segundos: +3% Competencia y +$300 Cash pasivo',
+      benefit: 'Cada 30s: +3% Cuota de Mercado y +$300 de ingresos pasivos',
       perSec: 'Cada 30s',
       income: '$300',
       share: '+3%'
@@ -135,7 +135,7 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 2,
       cost: 4000,
       name: 'Repartidor Experimentado',
-      benefit: 'Cada 30 Segundos: +4% Competencia y +$400 Cash pasivo',
+      benefit: 'Cada 30s: +4% Cuota de Mercado y +$400 de ingresos pasivos',
       perSec: 'Cada 30s',
       income: '$400',
       share: '+4%'
@@ -144,7 +144,7 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 3,
       cost: 5000,
       name: 'Distribuidor Profesional',
-      benefit: 'Cada 30 Segundos: +5% Competencia y +$500 Cash pasivo',
+      benefit: 'Cada 30s: +5% Cuota de Mercado y +$500 de ingresos pasivos',
       perSec: 'Cada 30s',
       income: '$500',
       share: '+5%'
@@ -153,7 +153,7 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 4,
       cost: 7500,
       name: 'Súper Repartidor Experto',
-      benefit: 'Cada 30 Segundos: +5% Competencia y +$1000 Cash pasivo',
+      benefit: 'Cada 30s: +5% Cuota de Mercado y +$1000 de ingresos pasivos',
       perSec: 'Cada 30s',
       income: '$1000',
       share: '+5%'
@@ -162,315 +162,303 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
       level: 5,
       cost: 10000,
       name: 'Flota Máxima Experto+',
-      benefit: 'Cada 15 Segundos: +5% Competencia y +$1000 Cash pasivo',
+      benefit: 'Cada 15s: +5% Cuota de Mercado y +$1000 de ingresos pasivos',
       perSec: 'Cada 15s',
       income: '$1000',
       share: '+5%'
     }
   ];
 
-  const currentRenovation = RENOVATIONS_LIST.find(r => r.level === renovationLevel + 1);
-  const nextEmployee = EMPLOYEES_LIST.find(e => e.level === employeeLevel + 1);
-
   return (
-    <div id="own-pizzeria-modal-overlay" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div id="own-pizzeria-modal-overlay" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div 
         id="own-pizzeria-modal-container"
-        className="bg-slate-900 rounded-[32px] shadow-25 max-w-4xl w-full overflow-hidden text-slate-100 flex flex-col h-[600px] transform scale-100 transition-all duration-305 border-4"
+        className="bg-slate-900 rounded-[28px] shadow-2xl max-w-4xl w-full overflow-hidden text-slate-150 flex flex-col h-[580px] border-2 transition-all duration-200"
         style={{ borderColor: pizzeriaColor }}
       >
-        {/* Header - Corporate Theme */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 p-6 flex justify-between items-center border-b-2 border-slate-800">
+        {/* Header - Friendly & Vibrant */}
+        <div className="bg-slate-950 p-5 flex justify-between items-center border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="text-slate-950 p-3 rounded-2xl shadow-lg relative animate-pulse" style={{ backgroundColor: pizzeriaColor }}>
-              <Pizza className="w-8 h-8 fill-slate-950" />
-              <Zap className="w-4 h-4 absolute -bottom-1 -right-1 text-red-700 bg-white rounded-full p-0.5" />
+            <div className="p-2.5 rounded-xl text-slate-950 flex items-center justify-center" style={{ backgroundColor: pizzeriaColor }}>
+              <Pizza className="w-6 h-6 fill-slate-950" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tight font-serif uppercase" style={{ color: pizzeriaColor }}>{pizzeriaName}</h2>
-              <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Despacho Central de Distribución y Negocios</p>
+              <h2 className="text-xl font-black tracking-tight uppercase" style={{ color: pizzeriaColor }}>{pizzeriaName}</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tablero de Gestión e Inversión</p>
             </div>
           </div>
           <button 
             id="close-own-pizzeria-btn"
             onClick={onClose}
-            className="bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 p-2.5 px-5 rounded-2xl transition font-black text-xs cursor-pointer uppercase"
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 p-2 px-4 rounded-xl transition font-bold text-xs cursor-pointer"
           >
-            Volver al Mapa (X)
+            Volver al Mapa ✕
           </button>
         </div>
 
-        {/* Corporate Status Sub-Banner */}
-        <div className={`py-3 px-6 flex flex-wrap justify-between items-center text-xs border-b gap-4 transition duration-300 ${
-          businessTutorialStep === 'competition' 
-            ? 'bg-pink-950/90 border-pink-400 border-b-4 animate-pulse' 
-            : 'bg-slate-950/90 border-slate-800'
-        }`}>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5" title="Cuota que domina tu marca">
-              <TrendingUp className="w-4 h-4 text-emerald-400" />
-              <span>Participación de Mercado: <strong className="text-emerald-400 text-sm font-mono font-black">{playerMarketShare}%</strong></span>
+        {/* Unified Status & Market Share Panel - Highly Visual, Simple, Friendly */}
+        <div className="bg-slate-950/40 p-4 px-6 border-b border-slate-800 flex flex-col md:flex-row items-center gap-4 justify-between">
+          {/* Dual Market Share Progress Bar */}
+          <div className="flex-1 w-full flex flex-col gap-1">
+            <div className="flex justify-between items-center text-[11px] font-extrabold uppercase tracking-wide">
+              <span className="text-emerald-400 flex items-center gap-1">🟢 Tu Cuota de Mercado ({playerMarketShare}%)</span>
+              <span className="text-red-400 flex items-center gap-1">🔴 Rival ({rivalMarketShare}%)</span>
             </div>
-            <div className="flex items-center gap-1.5 text-rose-455" title="Cuota de la competencia rival">
-              <ShieldAlert className="w-4 h-4 text-red-500" />
-              <span>Pizzería Rival: <strong className="text-red-400 text-sm font-mono font-black">{rivalMarketShare}%</strong></span>
+            <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden flex shadow-inner">
+              <div style={{ width: `${playerMarketShare}%` }} className="bg-emerald-500 h-full transition-all duration-500 ease-out" />
+              <div style={{ width: `${rivalMarketShare}%` }} className="bg-red-500 h-full transition-all duration-500 ease-out" />
             </div>
+            <p className="text-[9px] text-slate-400 font-medium">⚠️ ¡Si la barra roja llega al 100%, tu pizzería quebrará y perderás!</p>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <span className="bg-slate-800 p-1 px-2.5 rounded-lg border border-slate-700 text-slate-350">
-              Efectivo: <strong className="text-yellow-400 font-mono font-bold">${money}</strong>
-            </span>
-            <span className="bg-slate-800 p-1 px-2.5 rounded-lg border border-slate-700 text-slate-350">
-              Edificio: <strong className="text-amber-400 font-bold">Nivel {renovationLevel}</strong>
-            </span>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-slate-950/80 border border-slate-800 p-2 px-3 rounded-lg text-xs font-semibold">
+              <span className="text-slate-400 mr-1.5 font-bold">💵 Capital:</span>
+              <strong className="text-yellow-400 font-mono">${money}</strong>
+            </div>
+            <div className="bg-slate-950/80 border border-slate-800 p-2 px-3 rounded-lg text-xs font-semibold">
+              <span className="text-slate-400 mr-1.5 font-bold">🏢 Local:</span>
+              <strong className="text-amber-400">Nivel {renovationLevel}/3</strong>
+            </div>
           </div>
         </div>
 
-        {/* Main Body - Left Sidebar Tabs & Right Dashboard Content */}
+        {/* Main Body - Redesigned Tab Navigation and Contents */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar Tabs */}
-          <div className="w-52 bg-slate-950 border-r border-slate-800 p-4 space-y-2 shrink-0">
-            <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest pl-2 mb-3">Secciones Tycoon</p>
-            
-            <button
-              onClick={() => { audio.playUpgrade(); setActiveTab('pedidos'); }}
-              className={`w-full flex items-center gap-2.5 p-3 rounded-xl transition text-xs font-black uppercase text-left ${
-                activeTab === 'pedidos' 
-                  ? 'bg-amber-500 text-slate-950 shadow-md' 
-                  : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Briefcase className="w-4 h-4 shrink-0" />
-              <span>Pedidos Activos</span>
-            </button>
+          {/* Side Tabs navigation */}
+          <div className="w-48 bg-slate-950/60 border-r border-slate-800 p-3 space-y-1 shrink-0 flex flex-col justify-between">
+            <div className="space-y-1">
+              <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest pl-2 mb-2">Menú de Gestión</p>
+              
+              <button
+                onClick={() => { audio.playUpgrade(); setActiveTab('pedidos'); }}
+                className={`w-full flex items-center gap-2 p-2.5 rounded-xl transition text-xs font-bold text-left ${
+                  activeTab === 'pedidos' 
+                    ? 'bg-amber-500 text-slate-950 font-black' 
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <Briefcase className="w-4 h-4 shrink-0" />
+                <span>Despachar Pedidos</span>
+              </button>
 
-            <button
-              onClick={() => { audio.playUpgrade(); setActiveTab('renovacion'); }}
-              className={`w-full flex items-center gap-2.5 p-3 rounded-xl transition text-xs font-black uppercase text-left ${
-                activeTab === 'renovacion' 
-                  ? 'bg-amber-500 text-slate-950 shadow-md' 
-                  : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Hammer className="w-4 h-4 shrink-0" />
-              <span>Reformas Base</span>
-            </button>
+              <button
+                onClick={() => { audio.playUpgrade(); setActiveTab('renovacion'); }}
+                className={`w-full flex items-center gap-2 p-2.5 rounded-xl transition text-xs font-bold text-left ${
+                  activeTab === 'renovacion' 
+                    ? 'bg-amber-500 text-slate-950 font-black' 
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <Hammer className="w-4 h-4 shrink-0" />
+                <span>Mejoras del Local</span>
+              </button>
 
-            <button
-              onClick={() => { audio.playUpgrade(); setActiveTab('empleados'); }}
-              className={`w-full flex items-center gap-2.5 p-3 rounded-xl transition text-xs font-black uppercase text-left relative ${
-                activeTab === 'empleados' 
-                  ? 'bg-amber-500 text-slate-950 shadow-md' 
-                  : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              } ${renovationLevel < 3 ? 'opacity-50' : ''}`}
-            >
-              <Users className="w-4 h-4 shrink-0" />
-              <span>Habilitar Personal</span>
-              {renovationLevel < 3 && <Lock className="w-3 h-3 absolute right-3 text-slate-500" />}
-            </button>
+              <button
+                disabled={renovationLevel < 3}
+                onClick={() => { if (renovationLevel >= 3) { audio.playUpgrade(); setActiveTab('empleados'); } }}
+                className={`w-full flex items-center gap-2 p-2.5 rounded-xl transition text-xs font-bold text-left relative ${
+                  activeTab === 'empleados' 
+                    ? 'bg-amber-500 text-slate-950 font-black' 
+                    : renovationLevel < 3
+                      ? 'text-slate-600 cursor-not-allowed opacity-50'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <Users className="w-4 h-4 shrink-0" />
+                <span>Personal Autónomo</span>
+                {renovationLevel < 3 && <Lock className="w-3 h-3 absolute right-3 text-slate-600" />}
+              </button>
+            </div>
 
-            <div className="pt-6 border-t border-slate-850 space-y-2 mt-4 select-none">
-              <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest pl-2">Estándar Rival</p>
-              <div className="bg-slate-900/40 p-2 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-semibold font-sans">
-                <p>Crecimiento rival: <strong className="text-red-400">+{rivalPassiveRate}% /m</strong></p>
-                <p className="mt-1">Efecto: ¡Si la tasa rival alcanza el 100%, pierdes!</p>
-              </div>
+            <div className="p-2.5 bg-slate-950/80 border border-slate-800/60 rounded-xl text-[10px] text-slate-400 space-y-0.5">
+              <p className="font-extrabold uppercase text-slate-500 text-[8px] tracking-wider mb-1">Rendimiento</p>
+              <p>Avance Rival: <span className="text-red-400">+{rivalPassiveRate}% /min</span></p>
+              <p className="text-[9px] text-slate-500 leading-tight">Cada entrega exitosa frena al rival.</p>
             </div>
           </div>
 
-          {/* Right Panel Main View Area */}
-          <div className="flex-1 p-6 bg-slate-900/60 overflow-y-auto">
+          {/* Tab Display Area */}
+          <div className="flex-1 p-5 bg-slate-900/40 overflow-y-auto">
             
-            {/* INLINE BUSINESS TUTORIAL BANNERS */}
+            {/* COMPACT FLOATING TUTORIAL INNER BANNER */}
             {businessTutorialStep === 'upgrades' && (
-              <div className="bg-pink-955/80 border-2 border-pink-400 p-4 rounded-2xl text-left text-xs text-pink-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
-                <div className="flex items-center gap-1.5 font-black text-sm text-pink-400">
-                  <span className="animate-bounce">🛠️</span>
-                  <span>TUTORIAL PASO 1: RENOVACIONES Y REFORMAS</span>
+              <div className="bg-pink-950/80 border border-pink-500/50 p-3 rounded-xl text-left text-xs mb-4 flex flex-col gap-1.5 shadow-md">
+                <div className="flex items-center gap-1 text-pink-400 font-extrabold">
+                  <span>🛠️</span>
+                  <span>TUTORIAL 1: ADQUIERE TU PRIMERA MEJORA</span>
                 </div>
-                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
-                  Debes invertir dinero para renovar tu negocio y desbloquear nuevas funciones. Cada nivel de reforma mejora visualmente la pizzería en el mapa y desbloquea nuevas ventajas competitivas (¡como solucionar la penalización del 50% de cobro por edificio deteriorado!).
+                <p className="text-[11px] text-slate-300">
+                  Mejora el edificio para aumentar las ganancias y desbloquear funciones. Comienza comprando la <strong>Reparación Estructural (Nivel 1)</strong> para quitar la penalización de ganancias.
                 </p>
-                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
-                  <span className="text-[9px] text-pink-300 font-extrabold uppercase tracking-wider">👉 Compra mejoras de la lista abajo o continúa</span>
+                <div className="flex justify-end mt-1 border-t border-slate-800/40 pt-1.5">
                   <button 
                     onClick={() => {
                       audio.playUpgrade();
                       onSetBusinessTutorialStep?.('competition');
                     }}
-                    className="px-3 py-1.5 bg-pink-500 hover:bg-pink-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
+                    className="px-2.5 py-1 bg-pink-500 hover:bg-pink-400 text-slate-950 font-bold uppercase text-[9px] rounded-lg shadow cursor-pointer transition flex items-center gap-0.5"
                   >
-                    Siguiente: Competencia <ChevronRight className="w-3.5 h-3.5" />
+                    Entendido, Siguiente <ChevronRight className="w-3 h-3" />
                   </button>
                 </div>
               </div>
             )}
 
             {businessTutorialStep === 'competition' && (
-              <div className="bg-pink-955/80 border-2 border-pink-400 p-4 rounded-2xl text-left text-xs text-pink-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
-                <div className="flex items-center gap-1.5 font-black text-sm text-pink-400">
-                  <span className="animate-bounce">📊</span>
-                  <span>TUTORIAL PASO 2: BARRA DE COMPETENCIA</span>
+              <div className="bg-pink-955 bg-pink-950/80 border border-pink-500/50 p-3 rounded-xl text-left text-xs mb-4 flex flex-col gap-1.5 shadow-md">
+                <div className="flex items-center gap-1 text-pink-400 font-extrabold">
+                  <span>📊</span>
+                  <span>TUTORIAL 2: PARTICIPACIÓN DE MERCADO Y RIVAL</span>
                 </div>
-                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
-                  Observa los porcentajes de arriba. Tu participación inicial es del 20%. Incrementas tu participación entregando pedidos y contratando personal. El rival crece automáticamente cada minuto. <strong>Si el rival alcanza el 100% de cuota, ¡perderás la partida por quiebra comercial!</strong>
+                <p className="text-[11px] text-slate-300">
+                  Mira la barra superior. Si tu competidor alcanza el 100%, pierdes. {renovationLevel < 3 ? (
+                    <span>Para desbloquear la contratación de personal, debes adquirir la <strong>Reforma Avanzada Nivel 3 (Negocio Operativo)</strong> en la pestaña 'Mejoras del Local'.</span>
+                  ) : (
+                    <span>¡Excelente! Has alcanzado el Nivel 3. Puedes ver la pestaña 'Personal Autónomo' ahora para automatizar compras.</span>
+                  )}
                 </p>
-                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
-                  <span className="text-[9px] text-pink-300 font-extrabold uppercase tracking-wider">👉 Siguiente: Entiende el Personal Autónomo</span>
-                  <button 
-                    onClick={() => {
-                      audio.playUpgrade();
-                      onSetBusinessTutorialStep?.('staff');
-                    }}
-                    className="px-3 py-1.5 bg-pink-500 hover:bg-pink-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
-                  >
-                    Siguiente: Personal <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                <div className="flex justify-end mt-1 border-t border-slate-800/40 pt-1.5">
+                  {renovationLevel >= 3 ? (
+                    <button 
+                      onClick={() => {
+                        audio.playUpgrade();
+                        onSetBusinessTutorialStep?.('staff');
+                      }}
+                      className="px-2.5 py-1 bg-pink-500 hover:bg-pink-400 text-slate-950 font-bold uppercase text-[9px] rounded-lg shadow cursor-pointer transition flex items-center gap-0.5"
+                    >
+                      Paso Final: Personal <ChevronRight className="w-3 h-3" />
+                    </button>
+                  ) : (
+                    <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">👉 Ve a 'Mejoras del Local' para habilitar el Paso 3</span>
+                  )}
                 </div>
               </div>
             )}
 
             {businessTutorialStep === 'staff' && (
-              <div className="bg-emerald-955/80 border-2 border-emerald-400 p-4 rounded-2xl text-left text-xs text-emerald-100 flex flex-col gap-2 mb-4 animate-scale-up shadow-2xl">
-                <div className="flex items-center gap-1.5 font-black text-sm text-emerald-400">
-                  <span className="animate-bounce">👥</span>
-                  <span>TUTORIAL PASO 3: PERSONAL Y AUTOMATIZACIÓN</span>
+              <div className="bg-emerald-950/80 border border-emerald-500/50 p-3 rounded-xl text-left text-xs mb-4 flex flex-col gap-1.5 shadow-md animate-pulse">
+                <div className="flex items-center gap-1 text-emerald-400 font-extrabold">
+                  <span>👥</span>
+                  <span>TUTORIAL 3: CONTRATA PERSONAL AUTOMATIZADO</span>
                 </div>
-                <p className="font-semibold leading-relaxed text-[11px] text-slate-200">
-                  ¡Ahora puedes contratar personal para automatizar tu pizzería! Los empleados comprados en esta pestaña generan ingresos de efectivo e incrementan tu competencia de forma pasiva en piloto automático. Además, verás físicamente a tus repartidores recorriendo el mapa.
+                <p className="text-[11px] text-slate-300">
+                  ¡Habilitaste el piloto automático! Compra repartidores autónomos para que circulen por el mapa, devuelvan pedidos y sumen ganancias de forma pasiva cada 30 segundos.
                 </p>
-                <div className="flex justify-between items-center mt-1 border-t border-slate-800/60 pt-2">
-                  <span className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">👉 Generación en piloto automático habilitada</span>
+                <div className="flex justify-end mt-1 border-t border-slate-800/40 pt-1.5">
                   <button 
                     onClick={() => {
                       audio.playSuccess();
                       onSetBusinessTutorialStep?.('completed');
                     }}
-                    className="px-3 py-1.5 bg-emerald-555 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase text-[10px] rounded-xl shadow transition hover:scale-102 flex items-center gap-1 cursor-pointer"
+                    className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold uppercase text-[9px] rounded-lg shadow cursor-pointer transition flex items-center gap-0.5"
                   >
-                    Completar Tutorial <CheckCircle2 className="w-3.5 h-3.5" />
+                    Completar Guía ✓
                   </button>
                 </div>
               </div>
             )}
-            
-            {/* TAB: MANUAL PEDIDOS */}
+
+            {/* TAB CONTENT: PEDIDOS */}
             {activeTab === 'pedidos' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                  <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
-                    <Pizza className="w-5 h-5 text-amber-500" /> Despachar Pedidos Manuales
+                <div className="flex justify-between items-center pb-1.5 border-b border-slate-800">
+                  <h3 className="text-sm font-bold text-amber-400 flex items-center gap-1.5">
+                    <Pizza className="w-4 h-4 text-amber-500" /> Despacho de Pedidos
                   </h3>
-                  <span className="text-[10px] bg-amber-500/10 text-amber-400 p-1 px-2.5 rounded-lg font-bold border border-amber-500/20">
-                    Capacidad: {activeOrders.length} / {maxActive}
+                  <span className="text-[10px] bg-amber-500/15 text-amber-400 p-0.5 px-2 rounded-md font-bold">
+                    Equipaje: {activeOrders.length} / {maxActive}
                   </span>
                 </div>
 
                 {isTruck && (
-                  <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-2xl p-3 flex items-center gap-2.5 text-emerald-300 text-xs shadow-md">
-                    <span className="text-xl animate-bounce">🚚</span>
-                    <p className="font-semibold">¡Tienes el Camión activo! El dinero final cobrado de cada despacho manual se <strong>multiplicará automáticamente por x2</strong>.</p>
+                  <div className="bg-emerald-950/40 border border-emerald-500/35 rounded-xl p-2.5 text-[11px] text-emerald-300 flex items-center gap-1.5">
+                    <span>🚚</span>
+                    <p>¡Camión Activo! Las ganancias de los despachos manuales son de <strong>Doble Recompensa (x2)</strong>.</p>
                   </div>
                 )}
 
                 {renovationLevel === 0 && (
-                  <div className="bg-red-950/80 border border-red-500/40 rounded-2xl p-3 flex items-center gap-2.5 text-red-300 text-xs shadow-md">
-                    <span className="text-xl animate-pulse">🏚️</span>
-                    <p className="font-semibold"><strong>Pizzería Deteriorada (Nivel 0)</strong>: Por la mala imagen comercial, las ganancias de pedidos manuales se reducen un <strong className="text-red-400">50%</strong>. Realiza la reforma para cobrar el 100%.</p>
+                  <div className="bg-red-950/40 border border-red-500/30 rounded-xl p-2.5 text-[11px] text-red-300 flex items-center gap-1.5">
+                    <span>🏚️</span>
+                    <p><strong>Edificio deteriorado (Nivel 0)</strong>: Solo recaudas el <strong>50%</strong> del valor. Mejora el local para cobrar el 100%.</p>
                   </div>
                 )}
 
-                {/* Orders Grid Display */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {availableOrders.map((order, i) => {
+                {/* Simplified orders list */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {availableOrders.map((order) => {
                     const house = houses.find(h => h.id === order.houseId);
                     if (!house) return null;
 
-                    const colorsMap = {
-                      facil: 'border-emerald-500/20 bg-emerald-950/20 text-emerald-400 badge-emerald',
-                      medio: 'border-sky-500/20 bg-sky-950/20 text-sky-400 badge-sky',
-                      dificil: 'border-rose-500/20 bg-rose-950/20 text-rose-450 badge-rose',
+                    const difficultyColors = {
+                      facil: 'text-emerald-400 bg-emerald-505/10 border-emerald-500/20',
+                      medio: 'text-sky-400 bg-sky-505/10 border-sky-500/20',
+                      dificil: 'text-rose-450 bg-rose-505/10 border-rose-500/20',
                     };
-                    const typeColor = colorsMap[order.difficulty];
 
-                    // Payout modified if Nivel 0
                     const rawReward = order.reward;
                     const finalRew = renovationLevel === 0 ? Math.round(rawReward * 0.5) : rawReward;
 
                     return (
-                      <div key={order.id} className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                      <div key={order.id} className="bg-slate-950/40 border border-slate-800 rounded-xl p-3 flex flex-col justify-between hover:border-slate-700 transition">
                         <div>
-                          <div className="flex justify-between items-start mb-2">
-                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${typeColor}`}>
+                          <div className="flex justify-between items-start mb-1">
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${difficultyColors[order.difficulty]}`}>
                               {order.difficulty}
                             </span>
-                            <span className="text-slate-600 font-mono text-xs">#0{i+1}</span>
                           </div>
 
-                          <h4 className="font-bold text-sm text-slate-100">Casa {house.number}</h4>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: house.color }} />
-                            <span className="text-[11px] text-slate-400 truncate capitalize font-medium">{house.name}</span>
-                          </div>
-
-                          <hr className="my-3 border-dashed border-slate-800" />
-
-                          <div className="space-y-1 text-xs select-none">
-                            <div className="flex items-center gap-2 text-slate-400 font-medium">
-                              <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                              <span>Tiempo: <strong className="text-slate-250 font-mono">{order.timeLimit}s</strong></span>
-                            </div>
-                            <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                              <DollarSign className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                              <span>Pago: <strong className="text-emerald-300 font-mono text-sm">${isTruck ? finalRew * 2 : finalRew}</strong></span>
-                            </div>
-                          </div>
+                          <h4 className="font-extrabold text-xs text-slate-200">Casa {house.number} ({house.name})</h4>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Límite de tiempo: {order.timeLimit} segundos</p>
                         </div>
 
-                        <button
-                          disabled={!canAcceptMore}
-                          onClick={() => {
-                            audio.playRentPay();
-                            onAcceptOrder(order);
-                          }}
-                          className={`w-full mt-4 py-2 px-3 rounded-xl font-bold text-[11px] transition uppercase cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
-                            canAcceptMore
-                              ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 shadow-md font-black'
-                              : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                          }`}
-                        >
-                          <PlaySquare className="w-4 h-4" />
-                          {canAcceptMore ? 'Aceptar' : 'Ocupado'}
-                        </button>
+                        <div className="flex justify-between items-center mt-3 border-t border-slate-800/40 pt-2.5">
+                          <span className="text-emerald-400 text-xs font-black">
+                            Pago: ${isTruck ? finalRew * 2 : finalRew}
+                          </span>
+                          <button
+                            disabled={!canAcceptMore}
+                            onClick={() => {
+                              audio.playRentPay();
+                              onAcceptOrder(order);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition cursor-pointer ${
+                              canAcceptMore
+                                ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 font-black'
+                                : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                            }`}
+                          >
+                            Cargar Pedido
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
 
                 {availableOrders.length === 0 && (
-                  <div className="text-center py-10 bg-slate-950/20 rounded-2xl border border-slate-855 border-dashed">
-                    <p className="text-slate-400 font-bold mb-1">No hay pedidos disponibles de la central.</p>
-                    <p className="text-[10px] text-slate-500">Se están horneando nuevas comandas de forma automática...</p>
+                  <div className="text-center py-8 bg-slate-950/10 rounded-xl border border-slate-800/80 border-dashed">
+                    <p className="text-slate-400 text-xs font-bold">No hay pedidos de la central listos.</p>
+                    <p className="text-[9px] text-slate-500 mt-0.5">Se están cocinando nuevas comandas en el horno...</p>
                   </div>
                 )}
 
                 {activeOrders.length > 0 && (
-                  <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4 mt-6">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
-                      <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping" /> Pedido Cargado en el Repartidor:
-                    </h4>
-                    {activeOrders.map((ord, idx) => {
-                      const targetH = houses.find(h => h.id === ord.houseId);
+                  <div className="bg-slate-950/70 rounded-xl border border-slate-800 p-3 mt-4 text-xs font-semibold">
+                    <p className="text-amber-400 font-extrabold text-[10px] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" /> Despacho en camino:
+                    </p>
+                    {activeOrders.map((ord) => {
+                      const tgt = houses.find(h => h.id === ord.houseId);
                       return (
-                        <div key={ord.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center text-xs">
+                        <div key={ord.id} className="flex justify-between items-center p-2 bg-slate-900 rounded-lg border border-slate-800/60 mt-1">
                           <div>
-                            <p className="font-bold text-slate-200">Casa {targetH?.number} ({targetH?.name})</p>
-                            <p className="text-slate-500 text-[10px] font-semibold mt-0.5">Destino final del GPS del vehículo</p>
+                            <p className="text-slate-200">Casa {tgt?.number} ({tgt?.name})</p>
                           </div>
-                          <span className="font-mono bg-red-950/50 text-red-400 p-1 px-3.5 rounded-lg font-black border border-red-900/50 flex items-center gap-1.5 shadow-sm">
-                            <Clock className="w-3.5 h-3.5 text-red-500" />
-                            {idx === 1 ? 'Pausado' : `${Math.ceil(ord.timeLeft)}s...`}
+                          <span className="font-mono text-[10px] text-red-400 bg-red-950/40 border border-red-900/50 p-1 rounded font-bold flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-red-500" />
+                            {Math.ceil(ord.timeLeft)}s...
                           </span>
                         </div>
                       );
@@ -480,15 +468,15 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
               </div>
             )}
 
-            {/* TAB: REFORMAS BASE */}
+            {/* TAB CONTENT: UPGRADES */}
             {activeTab === 'renovacion' && (
               <div className="space-y-4">
-                <h3 className="text-base font-bold text-amber-400 flex items-center gap-2 pb-2 border-b border-slate-800">
-                  <Hammer className="w-5 h-5 text-amber-500" /> Inversión y Reformas del Establecimiento
+                <h3 className="text-sm font-bold text-amber-400 flex items-center gap-1.5 pb-1.5 border-b border-slate-800">
+                  <Hammer className="w-4 h-4 text-amber-500" /> Mejoras del Local Comercial
                 </h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Invierte el capital que lograste acumular para reactivar de forma profesional este espacio. Cada nivel habilita notables progresiones físicas y económicas:</p>
+                <p className="text-[11px] text-slate-400 font-medium">Reformar las instalaciones del edificio activa grandes cualidades competitivas:</p>
 
-                <div className="space-y-4 pt-2">
+                <div className="space-y-3 pt-1">
                   {RENOVATIONS_LIST.map((ren) => {
                     const isPurchased = renovationLevel >= ren.level;
                     const isLocked = ren.level > renovationLevel + 1;
@@ -498,50 +486,50 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
                     return (
                       <div 
                         key={ren.level}
-                        className={`border rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${
+                        className={`border rounded-xl p-3 flex justify-between items-center gap-4 transition ${
                           isPurchased 
-                            ? 'border-emerald-500/40 bg-emerald-950/15' 
+                            ? 'border-emerald-500/25 bg-emerald-950/5' 
                             : isNextToBuy 
-                              ? 'border-amber-500/40 bg-slate-950/40' 
-                              : 'border-slate-800 bg-slate-950/20 opacity-40'
+                              ? 'border-amber-500/30 bg-slate-950/30' 
+                              : 'border-slate-850 bg-slate-950/10 opacity-30'
                         }`}
                       >
-                        <div className="flex gap-3">
-                          <div className={`p-3 rounded-xl border shrink-0 ${
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg border shrink-0 ${
                             isPurchased 
-                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-405' 
                               : isNextToBuy 
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
-                                : 'bg-slate-800 border-slate-700 text-slate-500'
+                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-405' 
+                                : 'bg-slate-800 border-slate-700 text-slate-600'
                           }`}>
-                            <ren.icon className="w-6 h-6" />
+                            <ren.icon className="w-5 h-5" />
                           </div>
-                          <div>
+                          <div className="text-left font-medium">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <h4 className="font-extrabold text-sm text-slate-100">{ren.title}</h4>
-                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              <h4 className="font-extrabold text-xs text-slate-100">{ren.title}</h4>
+                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded ${
                                 isPurchased 
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
                                   : 'bg-slate-800 text-slate-400'
                               }`}>
-                                {isPurchased ? 'Completa' : `Nivel ${ren.level}`}
+                                {isPurchased ? 'Completado' : `Nivel ${ren.level}`}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-450 font-semibold mt-1 leading-normal">{ren.desc}</p>
-                            <p className="text-xs text-emerald-400/90 font-bold mt-2 flex items-center gap-1.5">
-                              <Award className="w-3.5 h-3.5" /> Efecto: {ren.benefit}
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{ren.desc}</p>
+                            <p className="text-[10px] text-emerald-450 font-bold mt-1.5 flex items-center gap-1">
+                              <Award className="w-3 h-3 text-emerald-450" /> Ventaja: {ren.benefit}
                             </p>
                           </div>
                         </div>
 
-                        <div className="shrink-0 w-full md:w-auto">
+                        <div className="shrink-0 text-right">
                           {isPurchased ? (
-                            <span className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-xs bg-emerald-500/10 border border-emerald-500/30 p-2 px-4 rounded-xl cursor-default select-none">
-                              <CheckCircle2 className="w-4 h-4" /> Comprado
+                            <span className="flex items-center gap-1 text-emerald-400 font-extrabold text-[10px] bg-emerald-500/15 border border-emerald-500/20 p-1.5 px-3 rounded-lg cursor-default select-none">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Adquirido
                             </span>
                           ) : isLocked ? (
-                            <span className="flex items-center gap-1 text-slate-500 font-black text-xs p-2 px-4 rounded-xl select-none cursor-not-allowed">
-                              <Lock className="w-3.5 h-3.5" /> Bloqueado
+                            <span className="flex items-center gap-0.5 text-slate-600 font-bold text-[10px] p-1.5 px-3 rounded select-none cursor-not-allowed">
+                              <Lock className="w-3 h-3" /> Cerrado
                             </span>
                           ) : (
                             <button
@@ -549,14 +537,14 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
                               onClick={() => {
                                 onUpgradeRenovation(ren.level, ren.cost);
                               }}
-                              className={`w-full py-3 px-5 rounded-xl font-bold text-xs transition uppercase flex items-center justify-center gap-1.5 shadow-md ${
+                              className={`py-2 px-3 rounded-lg font-bold text-[10px] transition uppercase flex items-center justify-center gap-1 cursor-pointer ${
                                 canAfford
-                                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 cursor-pointer font-black'
+                                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 font-black shadow-sm'
                                   : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                               }`}
                             >
-                              <DollarSign className="w-4 h-4" />
-                              {canAfford ? `Comprar ($${ren.cost})` : `Poco Capital ($${ren.cost})`}
+                              <DollarSign className="w-3.5 h-3.5" />
+                              {canAfford ? `$${ren.cost}` : `Falta Dinero ($${ren.cost})`}
                             </button>
                           )}
                         </div>
@@ -567,38 +555,31 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
               </div>
             )}
 
-            {/* TAB: EMPLEADOS */}
+            {/* TAB CONTENT: EMPLEADOS */}
             {activeTab === 'empleados' && (
               <div className="space-y-4">
-                <h3 className="text-base font-bold text-amber-400 flex items-center gap-2 pb-2 border-b border-slate-800">
-                  <Users className="w-5 h-5 text-amber-500" /> Contratación y Capas de Empleados Automatizados
+                <h3 className="text-sm font-bold text-amber-400 flex items-center gap-1.5 pb-1.5 border-b border-slate-800">
+                  <Users className="w-4 h-4 text-amber-500" /> Reclutar Personal Automatizado
                 </h3>
 
                 {renovationLevel < 3 ? (
-                  <div className="bg-slate-950/80 border-2 border-slate-800 p-8 rounded-3xl text-center select-none space-y-4 my-6">
-                    <div className="w-16 h-16 rounded-full bg-slate-900 border-2 border-slate-700 flex items-center justify-center mx-auto text-slate-500 shadow-inner">
-                      <Lock className="w-8 h-8" />
+                  <div className="bg-slate-950/50 border border-slate-800 p-6 rounded-2xl text-center select-none space-y-3 my-4">
+                    <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-755 flex items-center justify-center mx-auto text-slate-500 shadow-inner">
+                      <Lock className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-300 uppercase tracking-wide">Módulo de Empleados Bloqueado</h4>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-normal">Para poder alojar y automatizar despachos mediante empleados dedicados, necesitas reformar totalmente las instalaciones operativas del edificio alcanzando primero la <strong>Reforma Avanzada Nivel 3 (Negocio Operativo)</strong>.</p>
+                      <h4 className="text-xs font-black text-slate-300 uppercase tracking-wide">Módulo de Personal Bloqueado</h4>
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1 leading-normal">Se necesita alcanzar la <strong>Reforma Avanzada Nivel 3 (Negocio Operativo)</strong> para habilitar el reclutamiento físico de repartidores.</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-5">
-                    <p className="text-xs text-slate-400 leading-normal font-medium">Contrata y profesionaliza tu personal automovilístico para automatizar por completo la pizzería principal de la isla. Tus empleados conducirán y despacharán generando ingresos de forma totalmente pasiva y autónoma:</p>
-
-                    <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-emerald-300">
-                      <div>
-                        <p className="font-bold flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-405" /> ¡Suministro Automatizado en Marcha!</p>
-                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">Tus reclutados visibles recorrerán el vecindario de la isla sumando flujos financieros.</p>
-                      </div>
-                      <span className="bg-emerald-500/10 border border-emerald-500/30 p-1 px-3 rounded-lg font-mono font-bold">
-                        Rango de plantilla actual: Level {employeeLevel} / 5
-                      </span>
+                  <div className="space-y-4">
+                    <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 text-[11px] text-emerald-300">
+                      <p className="font-bold">¡Automatización en Marcha!</p>
+                      <p className="text-slate-450 font-medium mt-0.5">El personal contratado generará fondos y aumentará tu cuota de mercado en piloto automático.</p>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3 font-medium">
                       {EMPLOYEES_LIST.map((emp) => {
                         const isPurchased = employeeLevel >= emp.level;
                         const isLocked = emp.level > employeeLevel + 1;
@@ -608,41 +589,36 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
                         return (
                           <div 
                             key={emp.level}
-                            className={`border rounded-2xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition ${
+                            className={`border rounded-xl p-3 flex justify-between items-center gap-3 transition ${
                               isPurchased 
-                                ? 'border-emerald-500/45 bg-emerald-950/10' 
+                                ? 'border-emerald-500/20 bg-emerald-950/5' 
                                 : isNextToBuy 
-                                  ? 'border-amber-500/40 bg-slate-950/40' 
-                                  : 'border-slate-800 bg-slate-950/10 opacity-35'
+                                  ? 'border-amber-500/25 bg-slate-950/30' 
+                                  : 'border-slate-850 bg-slate-95a/20 opacity-30 hover:none'
                             }`}
                           >
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="font-extrabold text-sm text-slate-100">{emp.name}</h4>
-                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            <div className="text-left font-medium">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="font-extrabold text-xs text-slate-150">{emp.name}</h4>
+                                <span className={`text-[8.5px] font-bold px-1.5 py-0.2 rounded ${
                                   isPurchased 
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
                                     : 'bg-slate-800 text-slate-400'
                                 }`}>
-                                  {isPurchased ? 'Activo' : `Upgrade Tier ${emp.level}`}
+                                  {isPurchased ? 'Contratado' : `Rango ${emp.level}`}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-450 font-semibold mt-1">Efecto: <strong className="text-emerald-400/90">{emp.benefit}</strong></p>
-                              <div className="flex items-center gap-4 mt-2.5 text-[10px] text-slate-400">
-                                <span className="bg-slate-950/80 p-1 px-2 rounded border border-slate-800 font-semibold">Tasa: <strong className="text-amber-400">{emp.perSec}</strong></span>
-                                <span className="bg-slate-950/80 p-1 px-2 rounded border border-slate-800 font-semibold">Ganancia: <strong className="text-green-405">{emp.income}</strong></span>
-                                <span className="bg-slate-950/80 p-1 px-2 rounded border border-slate-800 font-semibold">Competencia: <strong className="text-sky-400">{emp.share}</strong></span>
-                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{emp.benefit}</p>
                             </div>
 
-                            <div className="shrink-0 w-full md:w-auto">
+                            <div className="shrink-0 text-right">
                               {isPurchased ? (
-                                <span className="flex items-center gap-1.5 text-emerald-450 font-extrabold text-xs bg-emerald-500/10 border border-emerald-500/30 p-2 px-4 rounded-xl select-none cursor-default">
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Contratado
+                                <span className="flex items-center gap-1 text-emerald-400 font-extrabold text-[10px] bg-emerald-500/15 border border-emerald-500/20 p-1.5 px-3 rounded-lg select-none">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Activo
                                 </span>
                               ) : isLocked ? (
-                                <span className="flex items-center gap-1 text-slate-500 font-black text-xs p-2.5 px-4 rounded-xl select-none cursor-not-allowed">
-                                  <Lock className="w-3.5 h-3.5" /> Bloqueado
+                                <span className="flex items-center gap-0.5 text-slate-655 font-bold text-[10px] p-1.5 px-3 rounded select-none cursor-not-allowed">
+                                  <Lock className="w-3.5 h-3.5" /> Cerrado
                                 </span>
                               ) : (
                                 <button
@@ -650,14 +626,14 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
                                   onClick={() => {
                                     onUpgradeEmployee(emp.level, emp.cost);
                                   }}
-                                  className={`w-full py-3 px-5 rounded-xl font-bold text-xs transition uppercase flex items-center justify-center gap-1 shadow-md ${
+                                  className={`py-2 px-3 rounded-lg font-bold text-[10px] transition uppercase flex items-center justify-center gap-1 cursor-pointer ${
                                     canAfford
-                                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 cursor-pointer font-black'
+                                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-450 font-black shadow-sm'
                                       : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                                   }`}
                                 >
-                                  <DollarSign className="w-4 h-4" />
-                                  {canAfford ? `Contratar ($${emp.cost})` : `Poco Capital ($${emp.cost})`}
+                                  <DollarSign className="w-3.5 h-3.5" />
+                                  {canAfford ? `$${emp.cost}` : `Falta dinero ($${emp.cost})`}
                                 </button>
                               )}
                             </div>
@@ -672,18 +648,16 @@ export const OwnPizzeriaModal: React.FC<OwnPizzeriaModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Footer Panel */}
-        <div className="bg-slate-950 px-6 py-4 flex justify-between items-center border-t border-slate-850 text-xs text-slate-500 select-none">
-          <p className="font-semibold uppercase tracking-wider text-[10px]">Administrador de Imperios v1.2</p>
-          <div className="flex gap-2">
-            <button 
-              id="close-own-pizzeria-footer-btn"
-              onClick={onClose}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 rounded-xl text-xs font-black transition border border-slate-705 uppercase cursor-pointer"
-            >
-              Cerrar Tablero
-            </button>
-          </div>
+        {/* Modal Footer */}
+        <div className="bg-slate-950 px-5 py-3 flex justify-between items-center border-t border-slate-805 text-[10px] text-slate-500">
+          <p className="font-extrabold uppercase tracking-wide">Pasantía e Imperio Comercial v1.3</p>
+          <button 
+            id="close-own-pizzeria-footer-btn"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[10px] font-bold transition border border-slate-705 uppercase cursor-pointer"
+          >
+            Cerrar Tablero
+          </button>
         </div>
       </div>
     </div>

@@ -6,9 +6,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   DollarSign, Car, Calendar, ShieldAlert, Award, Clock, Sparkles, 
-  Play, RotateCcw, AlertTriangle, Volume2, VolumeX, Menu, CheckCircle2, Navigation
+  Play, RotateCcw, AlertTriangle, Volume2, VolumeX, Menu, CheckCircle2, Navigation,
+  Pause, Save, Settings, LogOut, ArrowLeft, Trash2, Check
 } from 'lucide-react';
-import { GameState, House, Order, Obstacle, Vagabond, Upgrades, VehicleId } from './types';
+import { GameState, House, Order, Obstacle, Vagabond, Upgrades, VehicleId, TERRITORIES, getTerritoryAt, REGION_MAP_OFFSET_X, REGION_MAP_OFFSET_Y } from './types';
 import { PizzeriaModal } from './components/PizzeriaModal';
 import { OwnPizzeriaModal } from './components/OwnPizzeriaModal';
 import { ConcesionarioModal, VEHICLES_LIST } from './components/ConcesionarioModal';
@@ -194,8 +195,8 @@ const generateHouses = (): House[] => {
     [shuffledCells[i], shuffledCells[j]] = [shuffledCells[j], shuffledCells[i]];
   }
 
-  // Generate 60 houses (scaled up from 28 to support expanded map)
-  const totalHousesToGenerate = 60;
+  // Generate 90 houses (scaled up to support expanded map and richess)
+  const totalHousesToGenerate = 90;
   for (let i = 0; i < totalHousesToGenerate; i++) {
     const targetCell = shuffledCells[i % shuffledCells.length];
     const cellMinX = colBounds[targetCell.col];
@@ -311,16 +312,89 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [muted, setMuted] = useState(false);
 
+  // New Save / Pause / Config state variables
+  const [currentSaveSlot, setCurrentSaveSlot] = useState<number | null>(null);
+  const [timePlayed, setTimePlayed] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [menuScreen, setMenuScreen] = useState<'main' | 'slots_new' | 'slots_load' | 'config'>('main');
+  const [saveSlotSelectedConfirm, setSaveSlotSelectedConfirm] = useState<number | null>(null);
+  const [slotToDeleteConfirm, setSlotToDeleteConfirm] = useState<number | null>(null);
+  const [showExitToMenuConfirm, setShowExitToMenuConfirm] = useState(false);
+  const [savesVersion, setSavesVersion] = useState(0);
+
+  const [musicVol, setMusicVol] = useState(() => {
+    try {
+      const stored = localStorage.getItem('pedilo_ya_config');
+      if (stored) {
+        const c = JSON.parse(stored);
+        if (c.musicVol !== undefined) return c.musicVol;
+      }
+    } catch(e){}
+    return 0.5;
+  });
+
+  const [sfxVol, setSfxVol] = useState(() => {
+    try {
+      const stored = localStorage.getItem('pedilo_ya_config');
+      if (stored) {
+        const c = JSON.parse(stored);
+        if (c.sfxVol !== undefined) return c.sfxVol;
+      }
+    } catch(e){}
+    return 0.5;
+  });
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Apply volume configuration and save to localStorage
+  useEffect(() => {
+    audio.setMusicVolume(musicVol);
+    audio.setSfxVolume(sfxVol);
+    try {
+      localStorage.setItem('pedilo_ya_config', JSON.stringify({ musicVol, sfxVol }));
+    } catch(e){}
+  }, [musicVol, sfxVol]);
+
+  // Fullscreen change listener to sync state with user events
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+    };
+  }, []);
+
   // Tutorial Systems State
   const [tutorialStep, setTutorialStep] = useState<'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed'>('prompt');
   const [businessTutorialStep, setBusinessTutorialStep] = useState<'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed'>('off');
+  const [showTutorialEndModal, setShowTutorialEndModal] = useState(false);
+  const [isTutorialMinimized, setIsTutorialMinimized] = useState(false);
+  const [wasUsingHelicopter, setWasUsingHelicopter] = useState(false);
+  const [victoryEnding, setVictoryEnding] = useState<'escape' | 'island_retire'>('escape');
+
+  // Time Played Accumulator
+  useEffect(() => {
+    if (gameState !== 'playing' || isPaused || showTutorialEndModal) return;
+    const interval = setInterval(() => {
+      setTimePlayed(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [gameState, isPaused, showTutorialEndModal]);
 
   // Core Player States
   const [money, setMoney] = useState(50);
   const [currentVehicleId, setCurrentVehicleId] = useState<VehicleId>('pie');
   const [upgrades, setUpgrades] = useState<Upgrades>({ ganancia: 0, suerte: 0, fuerza: 0 });
   const [failures, setFailures] = useState(0);
+  const [gameOverReason, setGameOverReason] = useState<'rent' | 'failures' | 'competition' | 'none'>('none');
   const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
+
+  // Konami Code Cheat State
+  const [konamiSpeedTimer, setKonamiSpeedTimer] = useState(0);
+  const konamiSpeedTimerRef = useRef(0);
+  const konamiSeqRef = useRef<string[]>([]);
 
   // Spatial Positions
   const [playerX, setPlayerX] = useState(0);
@@ -358,15 +432,26 @@ export default function App() {
 
   // Start/Stop Game Background Music loop based on gameplay state
   useEffect(() => {
-    if (gameState === 'playing') {
+    if (gameState === 'playing' && !isPaused) {
       audio.startBGM();
+    } else if (gameState === 'menu') {
+      audio.startMenuBGM();
     } else {
       audio.stopBGM();
     }
     return () => {
       audio.stopBGM();
     };
-  }, [gameState]);
+  }, [gameState, isPaused]);
+
+  // Periodic autosave every 60 seconds (only during gameplay)
+  useEffect(() => {
+    if (gameState !== 'playing' || isPaused || showTutorialEndModal || !currentSaveSlot) return;
+    const interval = setInterval(() => {
+      handleSaveGame(currentSaveSlot, true);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [gameState, isPaused, showTutorialEndModal, currentSaveSlot]);
 
   // Pizzeria Order states
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
@@ -398,6 +483,74 @@ export default function App() {
   const [isRivalDefeated, setIsRivalDefeated] = useState(false);
   const [hasGlobalized, setHasGlobalized] = useState(false);
   const [passiveTimer, setPassiveTimer] = useState(0);
+
+  // Chapter 3 States
+  const [chapter, setChapter] = useState<1 | 2 | 3>(1);
+  const [insideRegionId, setInsideRegionId] = useState<number | null>(null);
+  const [landingRegionId, setLandingRegionId] = useState<number | null>(null);
+  const [globalPlayerX, setGlobalPlayerX] = useState<number>(-250);
+  const [globalPlayerY, setGlobalPlayerY] = useState<number>(40);
+  const [showChapter3Transition, setShowChapter3Transition] = useState(false);
+
+  const startChapter3TransitionSequence = () => {
+    setShowChapter3Transition(true);
+    audio.startChapter3BGM();
+    
+    // Clear any active orders when moving to Chapter 3
+    setActiveOrders([]);
+    setAvailableOrders([]);
+
+    setTimeout(() => {
+      setChapter(3);
+      setHasGlobalized(true);
+      setMoney(0);
+      setPlayerX(-250); // Small corporate island center approx -250, 0
+      setPlayerY(40);
+      playerXRef.current = -250;
+      playerYRef.current = 40;
+      setShowChapter3Transition(false);
+    }, 7500); // 7.5 seconds screen
+  };
+
+  const handleExitRegion = () => {
+    // Preparation for future restrictions (e.g. activeOrders, miniGames, etc.)
+    const isRestricted = false;
+    if (isRestricted) {
+      alertBanner("⚠️ No puedes salir del territorio en este momento.");
+      audio.playFail();
+      return;
+    }
+
+    audio.playUpgrade();
+    setPlayerX(globalPlayerX);
+    setPlayerY(globalPlayerY);
+    playerXRef.current = globalPlayerX;
+    playerYRef.current = globalPlayerY;
+    setInsideRegionId(null);
+    alertBanner("🗺️ Has regresado al mapa de operaciones global.");
+  };
+
+  const triggerEnterRegionSequence = (regionId: number) => {
+    const reg = TERRITORIES.find(r => r.id === regionId);
+    if (!reg) return;
+
+    // Start of landing sequence
+    audio.playUpgrade();
+    setGlobalPlayerX(playerXRef.current);
+    setGlobalPlayerY(playerYRef.current);
+    setLandingRegionId(regionId);
+
+    setTimeout(() => {
+      setPlayerX(REGION_MAP_OFFSET_X);
+      setPlayerY(REGION_MAP_OFFSET_Y);
+      playerXRef.current = REGION_MAP_OFFSET_X;
+      playerYRef.current = REGION_MAP_OFFSET_Y;
+      setInsideRegionId(regionId);
+      setLandingRegionId(null);
+      audio.playUpgrade();
+      alertBanner("Mapa de región cargado");
+    }, 2800);
+  };
 
   // Simulation employees state
   const [employees, setEmployees] = useState<any[]>([]);
@@ -451,6 +604,7 @@ export default function App() {
     hasOwnPizzeria,
     playerMarketShare,
     hasGlobalized,
+    chapter,
     isRivalDefeated,
     isCustomizationOpen,
     renovationLevel,
@@ -458,6 +612,12 @@ export default function App() {
     pizzeriaColor,
     tutorialStep,
     businessTutorialStep,
+    konamiSpeedTimer,
+    showTutorialEndModal,
+    wasUsingHelicopter,
+    victoryEnding,
+    isPaused,
+    insideRegionId,
   };
 
   // Initialize and regenerate 3 orders
@@ -533,6 +693,16 @@ export default function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       const code = e.code.toLowerCase();
+
+      // Toggle Pause with Escape or P keys
+      if (key === 'escape' || key === 'p') {
+        const state = physicsStateRef.current;
+        if (state.gameState === 'playing') {
+          setIsPaused(prev => !prev);
+          audio.playUpgrade();
+          return;
+        }
+      }
       
       const newKeys = { 
         ...keysPressedRef.current, 
@@ -542,12 +712,47 @@ export default function App() {
       keysPressedRef.current = newKeys;
       setKeysPressed(newKeys);
 
+      // Konami Cheat Sequence Detector (Up Up Down Down Left Right Left Right B A)
+      const cheatKeyMap: { [key: string]: string } = {
+        arrowup: 'up',
+        arrowdown: 'down',
+        arrowleft: 'left',
+        arrowright: 'right',
+        b: 'b',
+        a: 'a'
+      };
+      const parsedCheat = cheatKeyMap[key];
+      if (parsedCheat) {
+        konamiSeqRef.current = [...konamiSeqRef.current, parsedCheat].slice(-10);
+        const targetSequence = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 'b', 'a'];
+        const isSeqComplete = targetSequence.every((val, idx) => val === konamiSeqRef.current[idx]);
+        if (isSeqComplete) {
+          konamiSeqRef.current = [];
+          konamiSpeedTimerRef.current = 5;
+          setKonamiSpeedTimer(5);
+          audio.playSuccess();
+          alertBanner("💨 ¡TRUCO KONAMI DE VELOCIDAD ACTIVADO! x2 Velocidad durante 5s.");
+        }
+      } else {
+        konamiSeqRef.current = [...konamiSeqRef.current, 'other'].slice(-10);
+      }
+
       // SPACEBAR triggers active interactions
       if (e.key === ' ' || e.key === 'Spacebar') {
         const curX = playerXRef.current;
         const curY = playerYRef.current;
 
         const state = physicsStateRef.current;
+
+        if (state.chapter === 3) {
+          if (state.insideRegionId === null) {
+            const activeTerritory = getTerritoryAt(curX, curY);
+            if (activeTerritory) {
+              triggerEnterRegionSequence(activeTerritory.id);
+            }
+          }
+          return;
+        }
 
         // Check secret password cheat in bottom-right corner (around 880, 880)
         const distCornerBR = Math.sqrt((curX - 880) ** 2 + (curY - 880) ** 2);
@@ -665,6 +870,9 @@ export default function App() {
       if (state.slowTime > 0) {
         setSlowTime(prev => Math.max(0, prev - dt));
       }
+      if (state.konamiSpeedTimer > 0) {
+        setKonamiSpeedTimer(prev => Math.max(0, prev - dt));
+      }
 
       // 2. CHECK KEYBOARD AND VIRTUAL DIRECTIONS
       let dx = 0;
@@ -700,8 +908,14 @@ export default function App() {
         moveSpeed *= mudSlowMultiplier;
       }
 
+      // Apply Konami speed cheat x4 speed multiplier
+      if (state.konamiSpeedTimer > 0) {
+        moveSpeed *= 4.0;
+      }
+
       // Zero speed when fully stunned or any menu layout is active
       const isAnyModalActive = 
+        state.isPaused ||
         state.isPizzeriaOpen || 
         state.isDealerOpen || 
         state.isCasinoOpen || 
@@ -711,7 +925,8 @@ export default function App() {
         state.isBuyRivalOpen ||
         state.isRivalDecisionOpen ||
         state.isCustomizationOpen ||
-        state.isCheatOpen;
+        state.isCheatOpen ||
+        state.showTutorialEndModal;
 
       if (state.stunTime > 0 || isAnyModalActive) {
         moveSpeed = 0;
@@ -729,7 +944,14 @@ export default function App() {
         let nextY = playerYRef.current + dy * moveSpeed * dt;
 
         // Constraint within island map boundary (Ground vehicles cannot enter ocean waters!)
-        if (state.currentVehicleId !== 'helicoptero') {
+        if (state.insideRegionId !== null) {
+          // Inside a territory/region, we have a hard boundary of -470 to 470 for all vehicles
+          nextX = Math.max(REGION_MAP_OFFSET_X - 470, Math.min(REGION_MAP_OFFSET_X + 470, nextX));
+          nextY = Math.max(REGION_MAP_OFFSET_Y - 470, Math.min(REGION_MAP_OFFSET_Y + 470, nextY));
+        } else if (state.chapter === 3 && state.insideRegionId === null) {
+          nextX = Math.max(-350, Math.min(850, nextX));
+          nextY = Math.max(-480, Math.min(480, nextY));
+        } else if (state.currentVehicleId !== 'helicoptero') {
           nextX = Math.max(-LIMIT, Math.min(LIMIT, nextX));
           nextY = Math.max(-LIMIT, Math.min(LIMIT, nextY));
         } else {
@@ -740,6 +962,19 @@ export default function App() {
 
         // 4. COLLISION CHECKS WITH BUILDINGS & SOLID OBJECTS (Helicopter ignores ground collisions!)
         if (state.currentVehicleId !== 'helicoptero') {
+          if (state.chapter === 3) {
+            if (state.insideRegionId === null) {
+              // Corporate HQ building (-250, 0) radius 25
+              const dCorp = Math.sqrt((nextX - (-250))**2 + nextY**2);
+              if (dCorp < 25) {
+                const curDist = Math.sqrt((playerXRef.current - (-250))**2 + playerYRef.current**2);
+                if (dCorp < curDist) {
+                  nextX = playerXRef.current;
+                  nextY = playerYRef.current;
+                }
+              }
+            }
+          } else {
           // A. Central Shops
           // Pizzeria (0, 0) radius 24
           const dPiz = Math.sqrt(nextX**2 + nextY**2);
@@ -803,6 +1038,7 @@ export default function App() {
               }
             }
           });
+          }
         }
 
         // Apply updated coordinates
@@ -1013,10 +1249,12 @@ export default function App() {
 
   // SECOND-INTERVAL TIMER FOR THE LEASE COUNTDOWNS AND ACTIVE ORDER CLOCKS
   useEffect(() => {
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || isPaused) return;
+    if (showTutorialEndModal) return;
 
     const timer = setTimeout(() => {
-      const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
+      if (showTutorialEndModal || isPaused) return;
+      const isTutorialActive = (tutorialStep !== 'off' && tutorialStep !== 'completed') && !hasOwnPizzeria;
 
       // 1. Day Clock tick - Locked/Paused during training
       if (isTutorialActive) {
@@ -1031,6 +1269,7 @@ export default function App() {
             if (money < rentDue) {
               // Game Over! Insolvency lease debt!
               audio.playFail();
+              setGameOverReason('rent');
               setGameState('gameover');
               return;
             } else {
@@ -1062,6 +1301,7 @@ export default function App() {
                 }
                 // Game Over! Market share hit 0% (rival reaches 100%)
                 audio.playFail();
+                setGameOverReason('competition');
                 setGameState('gameover');
                 return 0;
               }
@@ -1118,31 +1358,16 @@ export default function App() {
 
       // 2. Active Deliveries clocks tick
       if (activeOrders.length > 0) {
-        let orderExpired = false;
-        let expiredHouseId = -1;
+        const firstOrder = activeOrders[0];
+        if (firstOrder.timeLeft <= 1) {
+          const expiredHouseId = firstOrder.houseId;
 
-        setActiveOrders(prev => {
-          if (prev.length === 0) return prev;
-          if (prev[0].timeLeft <= 1) {
-            orderExpired = true;
-            expiredHouseId = prev[0].houseId;
-            return prev.slice(1); // remove expired order immediately
-          } else {
-            return prev.map((ord, idx) => {
-              if (idx === 0) {
-                return { ...ord, timeLeft: ord.timeLeft - 1 };
-              }
-              return ord;
-            });
-          }
-        });
-
-        if (orderExpired) {
           audio.playFail();
           setFailures(f => {
             const nextFailures = f + 1;
-            const isTutorialActive = tutorialStep !== 'off' && tutorialStep !== 'completed';
+            const isTutorialActive = (tutorialStep !== 'off' && tutorialStep !== 'completed') && !hasOwnPizzeria;
             if (nextFailures >= 3 && !isTutorialActive) {
+              setGameOverReason('failures');
               setGameState('gameover');
             } else if (nextFailures >= 3 && isTutorialActive) {
               alertBanner("🎓 TUTORIAL PROTEGIDO: Has fallado 3 entregas, pero la protección de entrenamiento evitó el Game Over.");
@@ -1153,20 +1378,59 @@ export default function App() {
           const targetHouse = houses.find(h => h.id === expiredHouseId);
           alertBanner(`⏰ ¡SE ACABÓ EL TIEMPO! Fallaste la entrega en Casa ${targetHouse?.number || ''}`);
 
+          // Remove the expired order immediately
+          setActiveOrders(prev => prev.slice(1));
+
           // Clear out any dynamic map clutter since the active run is ended
           setObstacles([]);
           setVagabonds([]);
+        } else {
+          setActiveOrders(prev => {
+            if (prev.length === 0) return prev;
+            return prev.map((ord, idx) => {
+              if (idx === 0) {
+                return { ...ord, timeLeft: ord.timeLeft - 1 };
+              }
+              return ord;
+            });
+          });
         }
       }
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [gameState, day, dayTimeLeft, activeOrders, money, houses]);
+  }, [
+    gameState,
+    day,
+    dayTimeLeft,
+    activeOrders,
+    money,
+    houses,
+    tutorialStep,
+    hasOwnPizzeria,
+    businessTutorialStep,
+    isRivalDefeated,
+    hasGlobalized,
+    businessDaysHeld,
+    rivalPassiveRate,
+    showTutorialEndModal,
+    isPaused
+  ]);
+
+
+  // Return to helicopter once the active orders are finished (delivered or expired/failed)
+  useEffect(() => {
+    if (activeOrders.length === 0 && wasUsingHelicopter) {
+      setCurrentVehicleId('helicoptero');
+      setWasUsingHelicopter(false);
+      alertBanner("🚁 ¡Entrega concluida! El Helicóptero vuelve a estar activo para moverte por la isla.");
+    }
+  }, [activeOrders.length, wasUsingHelicopter]);
 
 
   // Tycoon Passive Income and Competition Progression (1-second tick-rate engine)
   useEffect(() => {
-    if (gameState !== 'playing' || !hasOwnPizzeria) return;
+    if (gameState !== 'playing' || !hasOwnPizzeria || showTutorialEndModal || isPaused || chapter === 3) return;
 
     const interval = setInterval(() => {
       setPassiveTimer(prev => {
@@ -1269,7 +1533,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gameState, hasOwnPizzeria, renovationLevel, employeeLevel, isRivalDefeated]);
+  }, [gameState, hasOwnPizzeria, renovationLevel, employeeLevel, isRivalDefeated, showTutorialEndModal, isPaused]);
 
 
   // Synchronous visual employees simulation movement loop
@@ -1451,13 +1715,21 @@ export default function App() {
       return;
     }
 
+    let activeVehicleId = currentVehicleId;
+    if (activeVehicleId === 'helicoptero') {
+      setWasUsingHelicopter(true);
+      setCurrentVehicleId('camion');
+      activeVehicleId = 'camion';
+      alertBanner("🚁 ¡Helicóptero estacionado! Usando el Camión Duplicador para la entrega terrestre.");
+    }
+
     const nextQueue = [...activeOrders, { ...order, timeLeft: order.timeLimit }];
     setActiveOrders(nextQueue);
 
     // If tutorial step 1 is active, advance to step 2 delivery
     if (tutorialStep === 'pizzeria') {
       setTutorialStep('delivery');
-      alertBanner("🏠 ¡PEDIDO CARGADO! Ahora dirígete a la casa objetivo guiándote por el indicador rosa.");
+      alertBanner("🏠 ¡PEDIDO CARGADO! Ahora dirígete a la casa objetivo guiándote por el indicador verde.");
     }
 
     // Remove the selected order from available list
@@ -1467,7 +1739,7 @@ export default function App() {
     // "Los obstáculos aparecen únicamente cuando existe un pedido activo. Al entregar o fallar el pedido desaparecen."
     if (nextQueue.length === 1) {
       // First order starting, initialize randomized dynamic roadblocks
-      const newObs = generateDynamicObstacles(houses, currentVehicleId, completedOrdersCount);
+      const newObs = generateDynamicObstacles(houses, activeVehicleId, completedOrdersCount);
       setObstacles(newObs);
 
       // Vagabonds trigger criteria check:
@@ -1517,6 +1789,7 @@ export default function App() {
 
     // Close screen and restore focus
     closeAllModals();
+    triggerAutosave();
   };
 
   // BUY UPGRADE STATS HANDLER
@@ -1532,6 +1805,7 @@ export default function App() {
       [stat]: Math.min(10, prev[stat] + 1)
     }));
     audio.playUpgrade();
+    triggerAutosave();
   };
 
   // TYCOON RENOVATION BUY HANDLER
@@ -1541,6 +1815,14 @@ export default function App() {
     setRenovationLevel(nextLvl);
     audio.playUpgrade();
     alertBanner(`🛠️ ¡INFRAESTRUCTURA MEJORADA! Has invertido $${cost}. Pizzería alcanzó Nivel ${nextLvl}.`);
+
+    // Auto-advance business tutorial steps if level 3 renovation (enabling employees) is purchased
+    if ((businessTutorialStep === 'upgrades' || businessTutorialStep === 'competition') && nextLvl === 3) {
+      setBusinessTutorialStep('staff');
+      audio.playSuccess();
+      alertBanner("🎓 TUTORIAL: ¡Ingreso automático desbloqueado! Comienza el reclutamiento en la nueva pestaña 'Personal Autónomo'.");
+    }
+    triggerAutosave();
   };
 
   // TYCOON EMPLOYEE RECRUIT HANDLER
@@ -1551,6 +1833,7 @@ export default function App() {
     audio.playUpgrade();
     const ranks = ["Ninguno", "Novato", "Experimentado", "Profesional", "Experto", "Experto+"];
     alertBanner(`🛵 ¡RECLUTAMIENTO EFECTIVO! Rango alcanzado: ${ranks[nextLvl]} (Inversión: $${cost}).`);
+    triggerAutosave();
   };
 
   // CASINO REWARDS INJECTIONS
@@ -1565,6 +1848,7 @@ export default function App() {
 
     if (money >= 10000) {
       // SUCCESS! Fly away escape sequence
+      setVictoryEnding('escape');
       setGameState('victory');
       audio.playCasinoWin();
     } else {
@@ -1576,12 +1860,15 @@ export default function App() {
 
 
   // GAME RESTART HANDLER
-  const handleResetGame = () => {
+  const handleResetGame = (slotId?: number) => {
     setGameState('playing');
     setMoney(70); // start off-balance
     setCurrentVehicleId('pie');
+    setWasUsingHelicopter(false);
+    setVictoryEnding('escape');
     setUpgrades({ ganancia: 0, suerte: 0, fuerza: 0 });
     setFailures(0);
+    setGameOverReason('none');
     setCompletedOrdersCount(0);
     setTutorialStep('prompt');
     setBusinessTutorialStep('off');
@@ -1621,13 +1908,292 @@ export default function App() {
     setIsRivalDecisionOpen(false);
     setIsCheatOpen(false);
 
+    if (slotId !== undefined) {
+      setCurrentSaveSlot(slotId);
+      setTimePlayed(0);
+    }
+
     generatePizzeriaOrders(VEHICLES_LIST[0].speed);
+  };
+
+  const getSaveSlotData = (slotId: number): any | null => {
+    try {
+      const parsed = localStorage.getItem(`pedilo_ya_save_${slotId}`);
+      return parsed ? JSON.parse(parsed) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const hasAnySaveGame = (): boolean => {
+    const _dummy = savesVersion;
+    for (let i = 1; i <= 5; i++) {
+      if (localStorage.getItem(`pedilo_ya_save_${i}`)) return true;
+    }
+    return false;
+  };
+
+  const getMostRecentSaveSlot = (): number | null => {
+    const _dummy = savesVersion;
+    let rawSlot: number | null = null;
+    let latestTime = 0;
+    for (let i = 1; i <= 5; i++) {
+      const raw = localStorage.getItem(`pedilo_ya_save_${i}`);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const saveTime = new Date(parsed.lastSavedAt).getTime();
+          if (saveTime > latestTime) {
+            latestTime = saveTime;
+            rawSlot = i;
+          }
+        } catch(e){}
+      }
+    }
+    return rawSlot;
+  };
+
+  const handleSaveGame = (slotId: number, isAutosave = false) => {
+    // Collect active states
+    const saveData = {
+      slotId,
+      lastSavedAt: new Date().toISOString(),
+      timePlayed,
+      money,
+      currentVehicleId,
+      wasUsingHelicopter,
+      upgrades,
+      failures,
+      day,
+      dayTimeLeft,
+      completedOrdersCount,
+      tutorialStep,
+      businessTutorialStep,
+      playerX,
+      playerY,
+      playerAngle,
+      hasOwnPizzeria,
+      renovationLevel,
+      playerMarketShare,
+      businessDaysHeld,
+      rivalPassiveRate,
+      employeeLevel,
+      isRivalDefeated,
+      hasGlobalized,
+      chapter,
+      passiveTimer,
+      pizzeriaName,
+      pizzeriaColor
+    };
+
+    try {
+      localStorage.setItem(`pedilo_ya_save_${slotId}`, JSON.stringify(saveData));
+      setSavesVersion(v => v + 1);
+      if (!isAutosave) {
+        alertBanner(`💾 ¡JUEGO GUARDADO EXITOSAMENTE! (Slot ${slotId})`);
+      } else {
+        alertBanner(`🔄 AUTOGUARDADO RÁPIDO COMPLETO (Slot ${slotId})`);
+      }
+      audio.playCasinoWin();
+    } catch(e) {
+      alertBanner("❌ Error al acceder a localStorage para guardar");
+    }
+  };
+
+  const handleLoadGameBySlot = (slotId: number) => {
+    const data = getSaveSlotData(slotId);
+    if (!data) {
+      alertBanner(`❌ No hay datos guardados en el Slot ${slotId}`);
+      return;
+    }
+
+    // Set all active states
+    setCurrentSaveSlot(slotId);
+    if (data.timePlayed !== undefined) setTimePlayed(data.timePlayed);
+    setMoney(data.money);
+    setCurrentVehicleId(data.currentVehicleId);
+    if (data.wasUsingHelicopter !== undefined) setWasUsingHelicopter(data.wasUsingHelicopter);
+    setUpgrades(data.upgrades);
+    setFailures(data.failures);
+    setDay(data.day);
+    setDayTimeLeft(data.dayTimeLeft);
+    setCompletedOrdersCount(data.completedOrdersCount);
+    setTutorialStep(data.tutorialStep);
+    setBusinessTutorialStep(data.businessTutorialStep);
+    
+    setPlayerX(data.playerX);
+    setPlayerY(data.playerY);
+    playerXRef.current = data.playerX;
+    playerYRef.current = data.playerY;
+    
+    if (data.playerAngle !== undefined) {
+      setPlayerAngle(data.playerAngle);
+      playerAngleRef.current = data.playerAngle;
+    }
+    
+    setHasOwnPizzeria(data.hasOwnPizzeria);
+    setRenovationLevel(data.renovationLevel);
+    setPlayerMarketShare(data.playerMarketShare);
+    setBusinessDaysHeld(data.businessDaysHeld);
+    setRivalPassiveRate(data.rivalPassiveRate);
+    setEmployeeLevel(data.employeeLevel);
+    setIsRivalDefeated(data.isRivalDefeated);
+    setHasGlobalized(data.hasGlobalized);
+    if (data.chapter !== undefined) {
+      setChapter(data.chapter);
+    } else {
+      setChapter(data.hasGlobalized ? 3 : 1);
+    }
+    setPassiveTimer(data.passiveTimer);
+
+    if (data.pizzeriaName !== undefined) setPizzeriaName(data.pizzeriaName);
+    if (data.pizzeriaColor !== undefined) setPizzeriaColor(data.pizzeriaColor);
+
+    // clear active key states and resets
+    keysPressedRef.current = {};
+    setKeysPressed({});
+    setRentWarning(false);
+    setIsEscapeAsking(false);
+    setIsPaused(false);
+    setStunTime(0);
+    setSlowTime(0);
+
+    // regenerate valid list of orders
+    const loadedVehicle = VEHICLES_LIST.find(v => v.id === data.currentVehicleId) || VEHICLES_LIST[0];
+    generatePizzeriaOrders(loadedVehicle.speed);
+
+    setGameState('playing');
+    alertBanner(`📂 PARTIDA CARGADA CORRECTAMENTE (Slot ${slotId})`);
+    audio.playSuccess();
+  };
+
+  const handleDeleteSaveSlot = (slotId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      localStorage.removeItem(`pedilo_ya_save_${slotId}`);
+      alertBanner(`🗑️ Slot ${slotId} borrado correctamente.`);
+      audio.playCasinoWin();
+      setSavesVersion(v => v + 1);
+      if (currentSaveSlot === slotId) {
+        setCurrentSaveSlot(null);
+      }
+    } catch(e){}
+  };
+
+  const triggerAutosave = () => {
+    if (currentSaveSlot) {
+      setTimeout(() => {
+        handleSaveGame(currentSaveSlot, true);
+      }, 200);
+    }
+  };
+
+  const handleExitGame = () => {
+    alertBanner("👋 ¡Gracias por jugar! Tu progreso se guarda automáticamente. Puedes cerrar esta pestaña de forma segura.");
+    audio.playCasinoWin();
+  };
+
+  const renderSlotCard = (slotId: number, mode: 'new' | 'load') => {
+    const _dummyValueUsingState = savesVersion;
+    const data = getSaveSlotData(slotId);
+    
+    // Format played time
+    const formatTimePlayed = (seconds?: number) => {
+      if (!seconds) return '00:00';
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    };
+
+    const hasSave = !!data;
+
+    return (
+      <div
+        key={slotId}
+        id={`save-slot-card-${slotId}`}
+        onClick={() => {
+          if (mode === 'new') {
+            if (hasSave) {
+              setSaveSlotSelectedConfirm(slotId);
+            } else {
+              handleResetGame(slotId);
+            }
+          } else {
+            if (hasSave) {
+              handleLoadGameBySlot(slotId);
+            } else {
+              alertBanner("💥 Slot vacío, comienza un nuevo juego primero.");
+            }
+          }
+        }}
+        className={`w-full text-left p-4 rounded-2xl border-2 transition relative flex flex-col gap-1.5 focus:outline-none cursor-pointer ${
+          hasSave 
+            ? 'bg-slate-900 border-amber-500 text-slate-100 shadow-[0_4px_12px_rgba(245,158,11,0.15)] hover:border-amber-400 hover:scale-[1.01]' 
+            : 'bg-slate-950/40 border-slate-800 text-slate-400 border-dashed hover:border-slate-500 hover:text-slate-200'
+        }`}
+      >
+        <div className="flex justify-between items-center w-full">
+          <span className="font-sans font-black uppercase text-xs tracking-wider text-yellow-400">
+            Slot {slotId}
+          </span>
+          {hasSave ? (
+            <span className="text-[10px] bg-emerald-950 border border-emerald-800 text-emerald-400 px-2 py-0.5 rounded font-mono font-extrabold uppercase leading-none">
+              Ocupado
+            </span>
+          ) : (
+            <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-500 px-2 py-0.5 rounded font-mono font-extrabold uppercase leading-none animate-pulse">
+              Disponible
+            </span>
+          )}
+        </div>
+
+        {hasSave ? (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-300">
+            <div className="truncate">💵 Efectivo: <strong className="text-emerald-400 font-mono">${data.money}</strong></div>
+            <div>📅 Día: <strong className="text-amber-400 font-mono">{data.day}</strong></div>
+            <div className="truncate text-left flex items-center gap-1">🛵 Vehículo: <span className="font-bold">{VEHICLES_LIST.find(v => v.id === data.currentVehicleId)?.emoji || '🦶'} {VEHICLES_LIST.find(v => v.id === data.currentVehicleId)?.name || 'Pie'}</span></div>
+            <div>🕒 Tiempo: <strong className="text-slate-450 font-mono">{formatTimePlayed(data.timePlayed)}</strong></div>
+            {data.hasOwnPizzeria && (
+              <div className="col-span-2 mt-1.5 pt-1.5 border-t border-slate-800 text-[10px] flex justify-between items-center text-amber-500">
+                <span className="truncate max-w-[130px]">🏢 {data.pizzeriaName || 'Mi Pizzería'} (Lvl {data.renovationLevel})</span>
+                <span className="font-bold bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-900/40 font-mono text-[9px]">📊 Cuota: {data.playerMarketShare?.toFixed(1) || 0}%</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-4 text-center w-full text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+            + CREAR NUEVA PARTIDA
+          </div>
+        )}
+
+        {hasSave && (
+          <button
+            title="Borrar Partida"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSlotToDeleteConfirm(slotId);
+            }}
+            className="absolute top-2.5 right-2.5 p-2 rounded-xl bg-red-950/95 border-2 border-red-500 text-red-400 hover:bg-red-650 hover:text-white hover:scale-110 active:scale-95 transition-all duration-200 shadow-[0_4px_12px_rgba(239,68,68,0.35)] cursor-pointer z-20 flex items-center justify-center"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   // Rent details
   const nextRentDay = Math.ceil(day / 3) * 3;
   const nextRentAmount = Math.floor(nextRentDay / 3) * 500;
   const daysUntilNextRent = nextRentDay - day;
+  const totalRentSecondsRemaining = (daysUntilNextRent * 60) + dayTimeLeft;
+
+  const formatTimeRemaining = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div id="pedilo-ya-root-app" className={`w-full ${gameState === 'playing' ? 'h-screen overflow-hidden' : 'min-h-screen overflow-y-auto'} bg-sky-200 flex flex-col justify-between relative select-none selection:bg-amber-100 font-sans`}>
@@ -1658,41 +2224,45 @@ export default function App() {
             </div>
 
             {/* Vehicle Box */}
-            <div className="bg-white border-2 border-sky-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-sky-950 font-bold">
-              <span className="text-xl">{currentVehicle.emoji}</span>
-              <div>
-                <p className="text-[9px] uppercase text-sky-500 font-extrabold tracking-wider leading-none">Vehículo</p>
-                <p className="text-xs font-black leading-none mt-0.5 truncate max-w-[120px] text-sky-600">{currentVehicle.name}</p>
+            {chapter !== 3 && (
+              <div className="bg-white border-2 border-sky-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-sky-950 font-bold">
+                <span className="text-xl">{currentVehicle.emoji}</span>
+                <div>
+                  <p className="text-[9px] uppercase text-sky-500 font-extrabold tracking-wider leading-none">Vehículo</p>
+                  <p className="text-xs font-black leading-none mt-0.5 truncate max-w-[120px] text-sky-600">{currentVehicle.name}</p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Days Box */}
-            <div className="bg-orange-50 border-2 border-orange-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold" title={hasOwnPizzeria ? '¡Eres dueño de la pizzería!' : `Próximo pago de renta: $${nextRentAmount}`}>
-              <Calendar className="w-5 h-5 text-orange-550 font-bold" />
-              <div>
-                <p className="text-[9px] uppercase text-orange-600 font-extrabold tracking-wider leading-none">Día {day}</p>
-                <p className="font-mono text-xs font-black leading-none mt-0.5 text-orange-500">
-                  {hasOwnPizzeria ? (
-                    <span className="text-emerald-600 font-sans font-bold">🏢 Negocio Propio (Renta $0)</span>
-                  ) : daysUntilNextRent === 0 ? (
-                    <span className="text-red-600 animate-pulse">¡HOY Renta: ${nextRentAmount} (en {60 - dayTimeLeft}s)!</span>
-                  ) : (
-                    <span>Renta: ${nextRentAmount} en {daysUntilNextRent}d ({60 - dayTimeLeft}s)</span>
-                  )}
-                </p>
+            {chapter !== 3 && (
+              <div className="bg-orange-50 border-2 border-orange-400 p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm text-yellow-950 font-bold" title={hasOwnPizzeria ? '¡Eres dueño de la pizzería!' : `Próximo pago de renta: $${nextRentAmount}`}>
+                <Calendar className="w-5 h-5 text-orange-550 font-bold" />
+                <div>
+                  <p className="text-[9px] uppercase text-orange-600 font-extrabold tracking-wider leading-none">Día {day}</p>
+                  <p className="font-mono text-xs font-black leading-none mt-0.5 text-orange-500">
+                    {hasOwnPizzeria ? (
+                      <span className="text-emerald-600 font-sans font-bold">🏢 Negocio Propio (Renta $0)</span>
+                    ) : (
+                      <span>Próxima renta ($${nextRentAmount}) en: {formatTimeRemaining(totalRentSecondsRemaining)}</span>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Fails Box */}
-            <div className={`p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm border-2 font-bold ${
-              failures >= 2 ? 'bg-red-100 border-red-400 text-red-950' : 'bg-pink-50 border-pink-300 text-pink-950'
-            }`}>
-              <ShieldAlert className="w-5 h-5 text-pink-500" />
-              <div>
-                <p className="text-[9px] uppercase text-pink-600 font-extrabold tracking-wider leading-none">Fallos</p>
-                <p className="font-mono text-xs font-black leading-none mt-0.5 text-pink-700">📦 {failures} / 3</p>
+            {chapter !== 3 && (
+              <div className={`p-1.5 px-4 rounded-2xl flex items-center gap-2 shadow-sm border-2 font-bold ${
+                failures >= 2 ? 'bg-red-100 border-red-400 text-red-950' : 'bg-pink-50 border-pink-300 text-pink-950'
+              }`}>
+                <ShieldAlert className="w-5 h-5 text-pink-500" />
+                <div>
+                  <p className="text-[9px] uppercase text-pink-600 font-extrabold tracking-wider leading-none">Fallos</p>
+                  <p className="font-mono text-xs font-black leading-none mt-0.5 text-pink-700">📦 {failures} / 3</p>
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         )}
@@ -1709,24 +2279,53 @@ export default function App() {
           </button>
 
           {gameState === 'playing' && (
-            <button
-              id="permanent-upgrades-hud-btn"
-              onClick={() => setIsUpgradesOpen(true)}
-              className="bg-pink-500 hover:bg-pink-600 text-white font-black text-xs py-2.5 px-4 rounded-xl shadow-[0_4px_0_rgb(190,24,93)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(190,24,93)] transition-all flex items-center gap-1.5 border-2 border-pink-600 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 fill-pink-200" />
-              Upgrade Habilidad
-            </button>
+            <>
+              {chapter === 3 && insideRegionId !== null && (
+                <button
+                  id="return-global-map-hud-btn"
+                  onClick={handleExitRegion}
+                  className="bg-red-550 hover:bg-red-600 text-white font-black text-xs py-2.5 px-3.5 rounded-xl shadow-[0_4px_0_rgb(153,27,27)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(153,27,27)] transition-all flex items-center gap-1.5 border-2 border-red-605 cursor-pointer"
+                  title="Volver al mapa global"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-white" />
+                  <span>Volver al mapa global</span>
+                </button>
+              )}
+
+              <button
+                id="pause-game-hud-btn"
+                onClick={() => {
+                  setIsPaused(prev => !prev);
+                  audio.playUpgrade();
+                }}
+                className="bg-sky-500 hover:bg-sky-600 text-white font-black text-xs py-2.5 px-3.5 rounded-xl shadow-[0_4px_0_rgb(3,105,161)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(3,105,161)] transition-all flex items-center gap-1.5 border-2 border-sky-600 cursor-pointer"
+                title="Pausar juego"
+              >
+                <Pause className="w-3.5 h-3.5 fill-sky-200 text-sky-200" />
+                <span>Pausa</span>
+              </button>
+
+              {chapter !== 3 && (
+                <button
+                  id="permanent-upgrades-hud-btn"
+                  onClick={() => setIsUpgradesOpen(true)}
+                  className="bg-pink-500 hover:bg-pink-600 text-white font-black text-xs py-2.5 px-4 rounded-xl shadow-[0_4px_0_rgb(190,24,93)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(190,24,93)] transition-all flex items-center gap-1.5 border-2 border-pink-600 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 fill-pink-200" />
+                  Upgrade Habilidad
+                </button>
+              )}
+            </>
           )}
         </div>
       </header>
 
       {/* MOBILE DISPLAY STATS */}
-      {gameState === 'playing' && (
+      {gameState === 'playing' && chapter !== 3 && (
         <section className="bg-white border-b-2 border-yellow-400 p-2 text-[10px] flex justify-around items-center md:hidden font-sans font-bold text-gray-700">
           <span>💵 <strong className="text-emerald-600 font-black">${money}</strong></span>
           <span>{currentVehicle.emoji} {currentVehicle.name}</span>
-          <span>📅 Día {day} ({hasOwnPizzeria ? '🏢 Imperio' : (daysUntilNextRent === 0 ? `HOY Renta: $${nextRentAmount}` : `Renta: $${nextRentAmount} en ${daysUntilNextRent}d`)})</span>
+          <span>📅 Día {day} ({hasOwnPizzeria ? '🏢 Imperio' : `Renta ($${nextRentAmount}) en: ${formatTimeRemaining(totalRentSecondsRemaining)}`})</span>
           <span className="text-pink-650">⚠️ Fallos: {failures}/3</span>
         </section>
       )}
@@ -1735,7 +2334,7 @@ export default function App() {
       <main className="flex-1 w-full max-w-7xl mx-auto p-4 flex flex-col justify-center relative overflow-hidden">
         
         {/* COMPARTIDA DE COMPETENCIA BAR */}
-        {hasOwnPizzeria && (
+        {hasOwnPizzeria && chapter !== 3 && (
           <div className={`mb-3 w-full bg-slate-900/95 border-2 border-amber-500/80 p-3 rounded-2xl flex flex-col gap-1.5 shadow-xl select-none z-10 transition-all duration-300 relative ${rivalPulse ? 'scale-[1.01] border-red-500' : ''}`}>
             <div className="flex justify-between items-center text-xs">
               <div className="flex items-center gap-1.5 font-sans font-black uppercase" style={{ color: pizzeriaColor }}>
@@ -1800,36 +2399,288 @@ export default function App() {
 
         {/* MAIN MENU VIEW */}
         {gameState === 'menu' && (
-          <div className="bg-white rounded-[32px] border-4 border-yellow-400 p-8 max-w-lg mx-auto text-center space-y-6 shadow-2xl relative overflow-hidden">
-            
-            {/* Decorative Pizza */}
-            <div className="text-6.5xl animate-bounce">🍕🛵</div>
-
-            <div className="space-y-2">
-              <h2 className="text-4xl font-extrabold tracking-tight text-red-500 leading-none font-serif">Pedilo Ya</h2>
-              <p className="text-sm font-semibold text-gray-400">¿Tienes la destreza para ser el mejor repartidor de la Isla?</p>
+          <div className="relative w-full max-w-lg mx-auto p-1 z-10 transition-all duration-300">
+            {/* Parallax Cosmic Background */}
+            <div className="absolute inset-x-[-12px] inset-y-[-12px] bg-slate-950 pointer-events-none overflow-hidden rounded-[40px] border-4 border-slate-800 shadow-2xl z-0">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-955 via-slate-900 to-slate-955" />
+              {/* Star particles */}
+              <div className="absolute inset-0 opacity-30">
+                <div className="absolute top-1/5 left-1/4 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-pulse" />
+                <div className="absolute top-1/3 left-3/4 w-1 h-1 bg-yellow-250 rounded-full animate-ping" />
+                <div className="absolute top-2/3 left-1/5 w-1 h-1 bg-white rounded-full animate-pulse" />
+                <div className="absolute top-1/2 left-2/3 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
+                <div className="absolute top-10 left-10 w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+                <div className="absolute bottom-1/4 right-1/4 w-1 h-1 bg-yellow-200 rounded-full animate-ping animate-pulse" />
+              </div>
+              <span className="absolute -left-6 top-1/4 text-6xl opacity-10 rotate-12 animate-bounce flex flex-col gap-8">
+                <span>🍕</span>
+                <span>🚁</span>
+              </span>
+              <span className="absolute -right-6 bottom-1/4 text-6xl opacity-10 -rotate-12 animate-pulse flex flex-col gap-10">
+                <span>🛵</span>
+                <span>🏪</span>
+              </span>
+              {/* Bottom stylized grid */}
+              <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-slate-900 to-transparent opacity-45" />
             </div>
 
-            <hr className="border-gray-100" />
+            <div className="relative z-10 p-6 md:p-8 space-y-6 text-center select-none">
+              {menuScreen === 'main' && (
+                <>
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] tracking-widest font-extrabold text-amber-500 uppercase bg-amber-950/50 border border-amber-900/50 p-1 px-3.5 rounded-full inline-block">
+                      🏁 ISLA DELIVERY ARCADE • CAPÍTULOS 1 & 2
+                    </span>
+                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-amber-400 via-orange-500 to-red-650 leading-none py-1">
+                      PEDILO YA
+                    </h2>
+                    <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+                      Magnate Repartidor de Pizzas
+                    </p>
+                  </div>
 
-            <div className="text-left bg-amber-50/70 border border-amber-200/60 p-4 rounded-2xl text-xs text-orange-950 space-y-2 leading-relaxed font-semibold">
-              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Trabaja de repartidor de pizzas para ganar dinero.</p>
-              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Compra vehículos y helicópteros en la Tienda.</p>
-              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> Invierte en el Casino de la isla para duplicar tu botín.</p>
-              <p className="font-bold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" /> ¡Paga tu renta cada 3 días o quédate fuera!</p>
-              <p className="font-black flex items-center gap-1.5 bg-yellow-100/80 p-2 rounded-xl border border-yellow-300 text-amber-950"><CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" /> <span>🎯 <strong>OBJETIVO REAL:</strong> ¡Compra el <strong>Helicóptero privado</strong> y reúne <strong>$10,000</strong> en mano para cargar combustible y escapar victorioso!</span></p>
+                  <hr className="border-slate-800" />
+
+                  {/* Buttons Option Layout */}
+                  <div className="space-y-3 pt-2">
+                    {/* CONTINUAR BUTTON */}
+                    {hasAnySaveGame() && (
+                      <button
+                        id="menu-btn-continuar"
+                        onClick={() => {
+                          const slot = getMostRecentSaveSlot();
+                          if (slot) {
+                            handleLoadGameBySlot(slot);
+                          }
+                        }}
+                        className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-550 text-white font-black py-4 px-6 rounded-2xl shadow-[0_5px_0_rgb(6,95,70)] active:translate-y-0.5 active:shadow-[0_1px_0_rgb(6,95,70)] hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-xs uppercase tracking-wider border border-emerald-400"
+                      >
+                        <Play className="w-4 h-4 fill-white animate-pulse" />
+                        <span>Continuar</span>
+                      </button>
+                    )}
+
+                    {/* NUEVA PARTIDA BUTTON */}
+                    <button
+                      id="menu-btn-nueva-partida"
+                      onClick={() => {
+                        audio.playUpgrade();
+                        setMenuScreen('slots_new');
+                      }}
+                      className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-550 text-white font-black py-4 px-6 rounded-2xl shadow-[0_5px_0_rgb(146,64,14)] active:translate-y-0.5 active:shadow-[0_1px_0_rgb(146,64,14)] hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-xs uppercase tracking-wider border border-orange-400"
+                    >
+                      <Sparkles className="w-4 h-4 text-orange-250 fill-orange-255" />
+                      <span>Nueva Partida</span>
+                    </button>
+
+                    {/* CARGAR PARTIDA BUTTON */}
+                    <button
+                      id="menu-btn-cargar-partida"
+                      onClick={() => {
+                        audio.playUpgrade();
+                        setMenuScreen('slots_load');
+                      }}
+                      className="w-full bg-slate-900 hover:bg-slate-850 text-slate-100 font-black py-3.5 px-6 rounded-2xl shadow-[0_4px_0_rgb(15,23,42)] active:translate-y-0.5 active:shadow-none hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-xs uppercase border border-slate-800"
+                    >
+                      <Save className="w-4 h-4 text-slate-400" />
+                      <span>Cargar Partida</span>
+                    </button>
+
+                    {/* CONFIGURACION BUTTON */}
+                    <button
+                      id="menu-btn-configuracion"
+                      onClick={() => {
+                        audio.playUpgrade();
+                        setMenuScreen('config');
+                      }}
+                      className="w-full bg-slate-900 hover:bg-slate-850 text-slate-100 font-black py-3.5 px-6 rounded-2xl shadow-[0_4px_0_rgb(15,23,42)] active:translate-y-0.5 active:shadow-none hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-xs uppercase border border-slate-800"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400" />
+                      <span>Configuración</span>
+                    </button>
+
+                    {/* SALIR BUTTON */}
+                    <button
+                      id="menu-btn-salir"
+                      onClick={() => {
+                        handleExitGame();
+                      }}
+                      className="w-full bg-slate-950/50 hover:bg-slate-900 text-slate-500 font-bold py-2 px-6 rounded-xl hover:text-slate-300 transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-[11px] uppercase tracking-wide"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Salir</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* SLOTS NEW GAME VIEW */}
+              {menuScreen === 'slots_new' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-left">
+                    <button
+                      onClick={() => setMenuScreen('main')}
+                      className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-100 uppercase leading-none">Nueva Partida</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Elige en qué slot quieres guardar la partida</p>
+                    </div>
+                  </div>
+
+                  <hr className="border-slate-800" />
+
+                  {/* Slots Grid */}
+                  <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                    {[1, 2, 3, 4, 5].map(idx => renderSlotCard(idx, 'new'))}
+                  </div>
+                </div>
+              )}
+
+              {/* SLOTS LOAD GAME VIEW */}
+              {menuScreen === 'slots_load' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-left">
+                    <button
+                      onClick={() => setMenuScreen('main')}
+                      className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-100 uppercase leading-none">Cargar Partida</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Selecciona la partida que deseas jugar</p>
+                    </div>
+                  </div>
+
+                  <hr className="border-slate-800" />
+
+                  {/* Slots Grid */}
+                  <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                    {[1, 2, 3, 4, 5].map(idx => renderSlotCard(idx, 'load'))}
+                  </div>
+                </div>
+              )}
+
+              {/* CONFIGURATION PANEL SCREEN */}
+              {menuScreen === 'config' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-left">
+                    <button
+                      onClick={() => setMenuScreen('main')}
+                      className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-100 uppercase leading-none">Configuración</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Ajusta el sonido y pantalla de visualización</p>
+                    </div>
+                  </div>
+
+                  <hr className="border-slate-800" />
+
+                  {/* Sliders Area */}
+                  <div className="space-y-5 text-left bg-slate-900/60 border border-slate-800 p-5 rounded-2xl">
+                    {/* Music Volume control */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[11px] font-black text-slate-200">
+                        <span>🎶 VOLUMEN DE MÚSICA DE FONDO</span>
+                        <span className="font-mono text-amber-400">{Math.round(musicVol * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={musicVol}
+                        onChange={(e) => setMusicVol(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                    </div>
+
+                    {/* SFX Volume control */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[11px] font-black text-slate-200">
+                        <span>🔊 VOLUMEN DE EFECTOS SONOROS</span>
+                        <span className="font-mono text-amber-400">{Math.round(sfxVol * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={sfxVol}
+                        onChange={(e) => setSfxVol(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                    </div>
+
+                    {/* Screen Toggle */}
+                    <div className="flex justify-between items-center bg-slate-950/80 p-3 rounded-xl border border-slate-850 mt-4">
+                      <div className="text-[11px] font-black text-slate-200">
+                        <span>🖥️ PANTALLA COMPLETA</span>
+                        <p className="text-[9px] font-semibold text-slate-500 uppercase mt-0.5">Alternar pantalla completa de ventana</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          audio.playUpgrade();
+                          if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen().catch(() => {});
+                          } else {
+                            document.exitFullscreen().catch(() => {});
+                          }
+                        }}
+                        className={`px-4 py-2 font-black rounded-xl text-[10px] uppercase transition cursor-pointer ${
+                          isFullscreen 
+                            ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 font-black' 
+                            : 'bg-slate-800 text-slate-350 hover:bg-slate-750'
+                        }`}
+                      >
+                        {isFullscreen ? "Activada" : "Desactivada"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => {
-                audio.playUpgrade();
-                setGameState('playing');
-              }}
-              className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl shadow-[0_5px_0_rgb(153,27,27)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(153,27,27)] transition-all flex items-center justify-center gap-2 font-sans cursor-pointer text-sm uppercase tracking-wider border-2 border-red-650"
-            >
-              <Play className="w-5 h-5 fill-white" />
-              Comenzar Carrera
-            </button>
+            {/* CONFIRM SLOT OVERWRITE ALERT OVERLAY */}
+            {saveSlotSelectedConfirm !== null && (
+              <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                <div className="bg-slate-950 border-2 border-red-500 p-6 rounded-3xl max-w-sm w-full space-y-4 text-center shadow-2xl relative">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-red-950 flex items-center justify-center border border-red-500 text-red-500 text-2xl animate-bounce">
+                    ⚠️
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-md font-black text-slate-150 uppercase">¿Quieres reemplazar la partida?</h4>
+                    <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                      Este slot ya contiene una partida guardada. ¿Deseas reemplazarla y comenzar una nueva aventura? Se borrarán todos los datos anteriores.
+                    </p>
+                  </div>
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      onClick={() => setSaveSlotSelectedConfirm(null)}
+                      className="w-1/2 py-2.5 bg-slate-850 hover:bg-slate-800 rounded-xl font-bold text-xs uppercase text-slate-400 tracking-wider transition cursor-pointer"
+                    >
+                      No, Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const slot = saveSlotSelectedConfirm;
+                        setSaveSlotSelectedConfirm(null);
+                        handleResetGame(slot);
+                      }}
+                      className="w-1/2 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-[0_3px_0_rgb(153,27,27)] active:translate-y-0.5 active:shadow-none border border-red-500"
+                    >
+                      Sí, Reemplazar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1837,115 +2688,6 @@ export default function App() {
         {/* GAME PLAYING ACTIVE AREA */}
         {gameState === 'playing' && (
           <div className="relative w-full h-full flex flex-col items-center">
-            
-            {/* HIGH VISIBILITY GUIDED TUTORIAL BANNER */}
-            {tutorialStep !== 'off' && tutorialStep !== 'completed' && (
-              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-amber-600 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
-                {/* Background ambient glow */}
-                <div className="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
-                
-                <div className="flex items-start gap-4 relative">
-                  <span className="text-3 outline-none shrink-0 mt-0.5 select-none text-2xl">🎓</span>
-                  <div className="flex-1 text-left space-y-2">
-                    <div className="flex justify-between items-center gap-2">
-                      <h4 className="font-sans font-black text-amber-500 text-xs sm:text-sm uppercase tracking-widest flex items-center gap-1.5 leading-none">
-                        <span>Guía de Iniciación</span>
-                        <span className="bg-amber-600 text-slate-950 text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full select-none leading-none">
-                          {tutorialStep === 'pizzeria' && 'PASO 1 / 4'}
-                          {tutorialStep === 'delivery' && 'PASO 2 / 4'}
-                          {tutorialStep === 'concesionario' && 'PASO 3 / 4'}
-                          {tutorialStep === 'casino' && 'PASO 4 / 4'}
-                        </span>
-                      </h4>
-                      <button
-                        onClick={() => {
-                          setTutorialStep('off');
-                          localStorage.setItem('tutorial_shown', 'true');
-                          audio.playRentPay();
-                          alertBanner("Comienzo de partida sin asistencia.");
-                        }}
-                        className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
-                      >
-                        Omitir guía ✕
-                      </button>
-                    </div>
-
-                    <div className="text-slate-100 text-[12px] sm:text-[13px] leading-relaxed font-semibold tracking-tight">
-                      {tutorialStep === 'pizzeria' && (
-                        <span>
-                          <strong>ESTACIÓN DE PEDIDOS</strong>: Diríjase a la pizzería central iluminada por el gran haz dorado. Siga el rumbo que le indica la <strong className="text-amber-400">flecha flotante interactiva</strong> sobre su posición. Al situarse en la entrada, presione <kbd className="bg-slate-800 text-white px-1.5 py-0.5 rounded font-mono text-xs border border-slate-700 font-bold">Espacio</kbd> para aceptar el cargo.
-                        </span>
-                      )}
-                      {tutorialStep === 'delivery' && (
-                        <span>
-                          <strong>ENTREGA DE CARGA</strong>: Dispone de un pedido activo en su equipaje. Siga el pilar verde celestial o la <strong className="text-amber-400">flecha de navegación</strong> hacia el domicilio de destino para concretar la entrega de forma exitosa.
-                        </span>
-                      )}
-                      {tutorialStep === 'concesionario' && (
-                        <span>
-                          <strong>CONCESIONARIO DE VEHÍCULOS</strong>: El cobro ha sido procesado adecuadamente. Para adquirir medios de transporte y optimizar la velocidad de traslado, siga la <strong className="text-amber-400 font-bold">flecha indicadora</strong> hacia el pilar celeste celestial del establecimiento comercial.
-                        </span>
-                      )}
-                      {tutorialStep === 'casino' && (
-                        <span>
-                          <strong>SALÓN DE RECREACIÓN</strong>: Fase final de orientación en la isla. Diríjase al pilar violeta brillante guiándose por la <strong className="text-amber-400">flecha flotante</strong> para concluir el adiestramiento básico de operaciones.
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* HIGH VISIBILITY BUSINESS TUTORIAL BANNER */}
-            {businessTutorialStep !== 'off' && businessTutorialStep !== 'completed' && (
-              <div className="w-full max-w-xl bg-slate-950/95 border-4 border-pink-600 rounded-3xl p-5 mb-4 shadow-2xl z-30 relative overflow-hidden">
-                <div className="flex items-start gap-4 relative">
-                  <span className="text-3 shrink-0 mt-0.5 select-none text-2xl">🏢</span>
-                  <div className="flex-1 text-left space-y-2">
-                    <div className="flex justify-between items-center gap-2">
-                      <h4 className="font-sans font-black text-pink-400 text-xs sm:text-sm uppercase tracking-widest flex items-center gap-1.5 leading-none">
-                        <span>Gestión Comercial</span>
-                        <span className="bg-pink-600 text-white text-[10px] font-mono font-black px-2.5 py-0.5 rounded-full select-none leading-none">
-                          {businessTutorialStep === 'upgrades' && 'PASO 1 / 3'}
-                          {businessTutorialStep === 'competition' && 'PASO 2 / 3'}
-                          {businessTutorialStep === 'staff' && 'PASO 3 / 3'}
-                        </span>
-                      </h4>
-                      <button
-                        onClick={() => {
-                          setBusinessTutorialStep('off');
-                          localStorage.setItem('business_shown', 'true');
-                          audio.playRentPay();
-                          alertBanner("Iniciando operaciones comerciales.");
-                        }}
-                        className="text-[9px] font-sans font-extrabold uppercase text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-1 px-2.5 rounded-lg cursor-pointer transition shrink-0 select-none"
-                      >
-                        Omitir guía ✕
-                      </button>
-                    </div>
-
-                    <div className="text-slate-100 text-[12px] sm:text-[13px] leading-relaxed font-semibold tracking-tight">
-                      {businessTutorialStep === 'upgrades' && (
-                        <span>
-                          <strong>SISTEMA DE MEJORAS</strong>: Acceda a su base para habilitar las mejoras de cocina y comenzar la reestructuración del edificio. Utilice la <strong className="text-pink-400">flecha de orientación</strong> para llegar al pilar rosa celestial.
-                        </span>
-                      )}
-                      {businessTutorialStep === 'competition' && (
-                        <span>
-                          <strong>REPARTO DE MERCADO</strong>: Observe el panel de competencia. Su oponente comercial intentará absorber clientes continuamente. Mantenga activa la presencia de su marca completando entregas o reclutando repartidores autónomos.
-                        </span>
-                      )}
-                      {businessTutorialStep === 'staff' && (
-                        <span>
-                          <strong>RECLUTAMIENTO DE PERSONAL</strong>: Acceda a la sección de Personal dentro de la consola de administración base para reclutar repartidores autónomos. Estos automatizarán las entregas de forma pasiva.
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             
             {/* Top orders instructions HUD */}
             <div className="w-full max-w-xl bg-white/95 border-2 border-yellow-400 rounded-2xl p-3 px-5 shadow mb-4 flex justify-between items-center text-xs font-bold text-gray-800 z-30">
@@ -1978,7 +2720,99 @@ export default function App() {
             </div>
 
             {/* Canvas 3D Area */}
-            <div className="w-full flex-1 max-h-[620px] rounded-3xl relative border-4 border-white/60 shadow-lg overflow-hidden">
+            <div className="w-full flex-1 h-[700px] max-h-[820px] min-h-[480px] rounded-3xl relative border-4 border-white/60 shadow-lg overflow-hidden">
+              {/* KONAMI SPEED BOOST HUD OVERLAY */}
+              {konamiSpeedTimer > 0 && (
+                <div 
+                  id="konami-cheat-hud" 
+                  className="absolute top-3 right-3 z-35 bg-amber-500 text-slate-950 font-black p-2.5 px-4 rounded-2xl shadow-2xl border border-amber-400 select-none animate-bounce flex items-center gap-2 text-xs uppercase tracking-wider"
+                >
+                  <span className="text-base animate-pulse">💨</span>
+                  <div>
+                    <span className="font-sans font-black">SUPER VELOCIDAD TRUCO</span>
+                    <div className="font-mono text-[10px] bg-slate-950/20 px-1.5 py-0.5 rounded-md mt-0.5 flex items-center justify-center font-bold">
+                      MULTIPLICADOR x4.0 • {konamiSpeedTimer.toFixed(1)}s
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* COMPACT FLOATING TUTORIAL PANEL */}
+              {((tutorialStep !== 'off' && tutorialStep !== 'completed') || 
+                (businessTutorialStep !== 'off' && businessTutorialStep !== 'completed')) && (
+                <div id="tutorial-hud-card" className="absolute top-3 left-3 z-35 max-w-[210px] sm:max-w-[270px] md:max-w-[310px] bg-slate-950/80 backdrop-blur-md border-2 border-amber-500/80 rounded-2xl p-2.5 sm:p-3 shadow-2xl text-left text-white select-none transition-all duration-200">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center gap-2">
+                      <h4 className="font-sans font-black text-amber-400 text-[10px] sm:text-xs uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                        <span>🎓 Guía</span>
+                        <span className="bg-amber-500/20 text-yellow-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-amber-500/20 leading-none">
+                          {tutorialStep !== 'off' && tutorialStep !== 'completed' ? (
+                            <>
+                              {tutorialStep === 'pizzeria' && 'Paso 1/4'}
+                              {tutorialStep === 'delivery' && 'Paso 2/4'}
+                              {tutorialStep === 'concesionario' && 'Paso 3/4'}
+                              {tutorialStep === 'casino' && 'Paso 4/4'}
+                            </>
+                          ) : (
+                            <>
+                              {businessTutorialStep === 'upgrades' && 'Gestión 1/3'}
+                              {businessTutorialStep === 'competition' && 'Gestión 2/3'}
+                              {businessTutorialStep === 'staff' && 'Gestión 3/3'}
+                            </>
+                          )}
+                        </span>
+                      </h4>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          id="btn-toggle-tutorial-minimize"
+                          onClick={() => setIsTutorialMinimized(!isTutorialMinimized)}
+                          className="text-[9px] font-bold text-slate-300 hover:text-white bg-slate-900 border border-slate-800 p-0.5 px-2 rounded cursor-pointer transition select-none flex items-center leading-none"
+                          title={isTutorialMinimized ? "Expandir guía" : "Minimizar guía"}
+                        >
+                          {isTutorialMinimized ? "Expandir" : "Minimizar"}
+                        </button>
+                        <button
+                          id="btn-close-tutorial"
+                          onClick={() => {
+                            if (tutorialStep !== 'off' && tutorialStep !== 'completed') {
+                              setTutorialStep('off');
+                              localStorage.setItem('tutorial_shown', 'true');
+                            } else {
+                              setBusinessTutorialStep('off');
+                              localStorage.setItem('business_shown', 'true');
+                            }
+                            audio.playRentPay();
+                            alertBanner("Asistencia desactivada.");
+                          }}
+                          className="text-[9px] font-bold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 p-0.5 px-1.5 rounded cursor-pointer transition select-none leading-none"
+                          title="Cerrar guía"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+
+                    {!isTutorialMinimized && (
+                      <p className="text-[10px] sm:text-xs text-slate-200 leading-snug font-semibold">
+                        {tutorialStep !== 'off' && tutorialStep !== 'completed' ? (
+                          <>
+                            {tutorialStep === 'pizzeria' && 'Ve a la pizzería central (marcada con el indicador dorado) y pulsa Espacio en la entrada para recibir tu primer pedido.'}
+                            {tutorialStep === 'delivery' && 'Entrega el pedido en la casa señalada con el indicador verde, y pulsa Espacio al llegar.'}
+                            {tutorialStep === 'concesionario' && 'Sigue la flecha hacia el indicador azul en la tienda para adquirir un vehículo útil.'}
+                            {tutorialStep === 'casino' && 'Sigue la flecha hacia el indicador morado del casino para completar tu aprendizaje.'}
+                          </>
+                        ) : (
+                          <>
+                            {businessTutorialStep === 'upgrades' && 'Dirígete a tu base (indicador rosa) y pulsa Espacio para desbloquear mejoras de cocina.'}
+                            {businessTutorialStep === 'competition' && 'Gana cuota de mercado entregando pedidos y contratando personal autónomo.'}
+                            {businessTutorialStep === 'staff' && 'Contrata personal autónomo para que genere ingresos pasivos de manera continua.'}
+                          </>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
               <GameCanvas
                 playerX={playerX}
                 playerY={playerY}
@@ -2002,6 +2836,9 @@ export default function App() {
                 pizzeriaName={pizzeriaName}
                 pizzeriaColor={pizzeriaColor}
                 hasGlobalized={hasGlobalized}
+                chapter={chapter}
+                insideRegionId={insideRegionId}
+                onClickRegion={triggerEnterRegionSequence}
                 tutorialStep={tutorialStep}
                 businessTutorialStep={businessTutorialStep}
                 onPlayerMove={(x, y, a) => {
@@ -2016,6 +2853,7 @@ export default function App() {
                     audio.playUpgrade();
                   } else if (tutorialStep === 'casino' && zone === 'casino') {
                     setTutorialStep('completed');
+                    setShowTutorialEndModal(true);
                     audio.playCasinoWin();
                   }
                 }}
@@ -2025,6 +2863,68 @@ export default function App() {
                   }
                 }}
               />
+
+              {/* Chapter 3 Territory HUD Overlay */}
+              {chapter === 3 && insideRegionId === null && (
+                (() => {
+                  const activeTerritory = getTerritoryAt(playerX, playerY);
+                  if (!activeTerritory) return null;
+                  return (
+                    <div 
+                      id="territory-hud"
+                      onClick={() => triggerEnterRegionSequence(activeTerritory.id)}
+                      className="absolute bottom-6 left-1/2 -translate-x-1/2 z-45 bg-slate-950/90 backdrop-blur-md border-4 rounded-3xl p-4 px-6 shadow-2xl text-center select-none flex flex-col items-center gap-1.5 min-w-[280px] sm:min-w-[340px] cursor-pointer hover:scale-[1.03] active:scale-95 transition-all animate-bounce"
+                      style={{ borderColor: activeTerritory.color }}
+                      title="Haz click o presiona ESPACIO para ingresar"
+                    >
+                      <span className="text-xl">📍</span>
+                      <div>
+                        <h3 
+                          className="text-sm sm:text-base font-black tracking-tight"
+                          style={{ color: activeTerritory.accent }}
+                        >
+                          {activeTerritory.name.toUpperCase()}
+                        </h3>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-0.5">
+                          Territorio de Operación (Haz click para ingresar)
+                        </p>
+                      </div>
+                      <div className="w-full h-[1px] bg-slate-800 my-1" />
+                      <p className="text-xs font-black text-white flex items-center gap-1.5">
+                        Presiona <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded text-[10px] font-extrabold font-mono">ESPACIO</span> o <span className="text-amber-400 underline font-extrabold font-sans">haz click aquí</span>
+                      </p>
+                    </div>
+                  );
+                })()
+              )}
+
+              {/* Chapter 3 Inside Territory HUD Overlay */}
+              {chapter === 3 && insideRegionId !== null && (
+                (() => {
+                  const reg = TERRITORIES.find(r => r.id === insideRegionId);
+                  if (!reg) return null;
+                  return (
+                    <div 
+                      id="territory-inside-hud"
+                      className="absolute bottom-6 left-1/2 -translate-x-1/2 z-45 bg-slate-950/90 backdrop-blur-md border-4 rounded-3xl p-3 px-5 shadow-2xl text-center select-none flex flex-col items-center gap-1 min-w-[280px] sm:min-w-[340px]"
+                      style={{ borderColor: reg.color }}
+                    >
+                      <span className="text-xl animate-pulse">🛠️</span>
+                      <div>
+                        <h3 
+                          className="text-sm sm:text-base font-black tracking-tight"
+                          style={{ color: reg.accent }}
+                        >
+                          {reg.name.toUpperCase()} (MÉTODO DE PRUEBA)
+                        </h3>
+                        <p className="text-[9px] text-slate-350 font-extrabold uppercase tracking-widest leading-none mt-0.5">
+                          Simulador Temporal de Capítulo 3
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
           </div>
         )}
@@ -2036,19 +2936,54 @@ export default function App() {
             <div className="text-5xl animate-spin">💀💀</div>
             <h2 className="text-3.5xl font-black uppercase text-red-505 tracking-tight font-serif">¡PARTIDA PERDIDA!</h2>
 
-            <div className="p-4 rounded-2xl bg-slate-955 font-sans text-xs border border-red-500/20 text-left space-y-2 select-none font-semibold text-slate-300">
-              <p>📍 Has quebrado por falta de pago de renta, o has fallado 3 pedidos de pizza de la isla.</p>
+            <div className="p-5 rounded-2xl bg-slate-955 border border-red-500/20 text-left space-y-3.5 font-sans">
+              <div className="space-y-1">
+                <h4 className="text-[10px] font-extrabold uppercase text-red-400 tracking-wider">Causa de la derrota:</h4>
+                <p className="text-sm font-black text-rose-500 leading-tight">
+                  {gameOverReason === 'failures' && 'Has acumulado 3 entregas fallidas.'}
+                  {gameOverReason === 'rent' && 'No tenías suficiente dinero para pagar la renta.'}
+                  {gameOverReason === 'competition' && 'La pizzería rival alcanzó el 100% del mercado.'}
+                  {gameOverReason === 'none' && 'Has quebrado por falta de recursos o de organización.'}
+                </p>
+              </div>
+
               <hr className="border-slate-800" />
-              <p>🏁 Día alcanzado: <strong className="text-white font-mono">Día {day}</strong></p>
-              <p>🍕 Entregas logradas: <strong className="text-green-400 font-mono">{completedOrdersCount} pizzas</strong></p>
-              <p>💵 Efectivo restante: <strong className="text-yellow-400 font-mono">${money}</strong></p>
+
+              <div className="space-y-2 text-xs font-semibold text-slate-300">
+                <p className="flex justify-between items-center">
+                  <span>📅 Día alcanzado:</span>
+                  <strong className="text-white font-mono">Día {day}</strong>
+                </p>
+                <p className="flex justify-between items-center font-semibold">
+                  <span>💵 Dinero final:</span>
+                  <strong className="text-emerald-450 font-mono">${money}</strong>
+                </p>
+                <p className="flex justify-between items-center">
+                  <span>🚗 Vehículo utilizado:</span>
+                  <strong className="text-sky-400 font-sans font-extrabold">{currentVehicle.emoji} {currentVehicle.name}</strong>
+                </p>
+                <p className="flex justify-between items-center">
+                  <span>🍕 Entregas completadas:</span>
+                  <strong className="text-green-400 font-mono">{completedOrdersCount}</strong>
+                </p>
+                <p className="flex justify-between items-center">
+                  <span>⚠️ Entregas fallidas:</span>
+                  <strong className="text-red-450 font-mono">{failures} / 3</strong>
+                </p>
+                {hasOwnPizzeria && (
+                  <p className="flex justify-between items-center">
+                    <span>🏢 Cuota de mercado final:</span>
+                    <strong className="text-pink-400 font-mono">{playerMarketShare.toFixed(1)}%</strong>
+                  </p>
+                )}
+              </div>
             </div>
 
             <button
               onClick={handleResetGame}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-4 rounded-2xl transition shadow-[0_4px_0_rgb(153,27,27)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_rgb(153,27,27)] cursor-pointer text-xs"
             >
-              <RotateCcw className="w-4 h-4 inline shrink-0" /> REINTENTAR PARTIDA
+              <RotateCcw className="w-4 h-4 inline shrink-0 mr-1" /> REINTENTAR PARTIDA
             </button>
           </div>
         )}
@@ -2057,13 +2992,23 @@ export default function App() {
         {/* VICTORY VICTORY SCREEN */}
         {gameState === 'victory' && (
           <div className="bg-gradient-to-r from-purple-900 via-pink-900 to-amber-900 text-white rounded-[32px] border-4 border-yellow-300 p-8 max-w-lg mx-auto text-center space-y-6 shadow-2xl animate-fade-in relative">
-            <div className="text-6.5xl animate-bounce">🚁🏆👑</div>
-            <h2 className="text-4xl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-250 font-serif uppercase">¡VUELO DE ESCAPE LOGRADO!</h2>
-            <p className="text-sm font-semibold text-slate-200">¡Lograste comprar el helicóptero privado, reuniste la billetera de capital necesaria y superaste la renta de la Isla!</p>
+            {victoryEnding === 'escape' ? (
+              <>
+                <div className="text-6.5xl animate-bounce">🚁🏆👑</div>
+                <h2 className="text-yxl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-250 font-serif uppercase text-3xl sm:text-4xl">¡VUELO DE ESCAPE LOGRADO!</h2>
+                <p className="text-sm font-semibold text-slate-200">¡Lograste comprar el helicóptero privado, reuniste la billetera de capital necesaria y superaste la renta de la Isla para escapar volando del circuito!</p>
+              </>
+            ) : (
+              <>
+                <div className="text-6.5xl animate-bounce">🏝️🍕👑</div>
+                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-250 font-serif uppercase">¡REY DE LA ISLA!</h2>
+                <p className="text-sm font-semibold text-slate-200">¡Compraste la pizzería abandonada, derrotaste a tu rival y decidiste quedarte en la isla! Declaraste el monopolio total del imperio pizzero como el indiscutible Rey Supremo.</p>
+              </>
+            )}
 
             <div className="p-5 rounded-2xl bg-black/40 text-left font-sans text-xs space-y-2 border border-white/10 select-none">
               <h4 className="font-extrabold text-sm text-yellow-300">Resumen del Magnate Repartidor:</h4>
-              <p>🚁 Vehículo Final: <strong>Helicóptero Privado</strong></p>
+              <p>🚀 Destino: <strong>{victoryEnding === 'escape' ? 'Fugitivo con Helicóptero Privado' : 'Establecido como Amo de la Isla'}</strong></p>
               <p>💵 Fortuna final en mano: <strong className="text-green-300 font-mono">${money}</strong></p>
               <p>🕒 Días sobrevividos: <strong className="text-white font-mono">{day} días</strong></p>
               <p>🍕 Total Entregas: <strong className="text-white font-mono">{completedOrdersCount}</strong></p>
@@ -2130,6 +3075,165 @@ export default function App() {
         onAddMoney={handleCasinoAddMoney}
         tutorialStep={tutorialStep}
       />
+
+      {/* 4. GAME PAUSE MODAL OVERLAY */}
+      {isPaused && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in text-center">
+          <div className="bg-slate-900 border-4 border-sky-400 p-8 max-w-sm w-full rounded-2xl space-y-6 text-center shadow-2xl relative select-none">
+            <div className="space-y-1.5">
+              <span className="text-[10px] tracking-widest font-extrabold text-sky-400 uppercase bg-sky-950/50 px-3.5 py-1 rounded-full border border-sky-900 inline-block">
+                ⏸️ JUEGO EN PAUSA
+              </span>
+              <h3 className="text-2xl font-black text-slate-100 uppercase mt-2 font-serif">Menú de Pausa</h3>
+              {currentSaveSlot ? (
+                <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Slot {currentSaveSlot} • Guardado activo</p>
+              ) : (
+                <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider animate-pulse">⚠️ Sin slot asignado (Guardado inactivo)</p>
+              )}
+            </div>
+
+            <hr className="border-slate-800" />
+
+            <div className="space-y-3 text-center">
+              {/* CONTINUAR JUEGO (RESUME) */}
+              <button
+                id="pause-btn-resume"
+                onClick={() => {
+                  setIsPaused(false);
+                  audio.playUpgrade();
+                }}
+                className="w-full bg-sky-500 hover:bg-sky-450 text-white font-black py-3 rounded-xl shadow-[0_4px_0_rgb(3,105,161)] active:translate-y-0.5 active:shadow-none hover:-translate-y-0.5 transition-all text-xs tracking-wider uppercase cursor-pointer border border-sky-450"
+              >
+                Volver al Juego
+              </button>
+
+              {/* SAVING OPTION */}
+              <button
+                id="pause-btn-save"
+                onClick={() => {
+                  if (currentSaveSlot) {
+                    handleSaveGame(currentSaveSlot);
+                  } else {
+                    alertBanner("❌ No hay un slot asignado a la partida actual");
+                  }
+                }}
+                disabled={!currentSaveSlot}
+                className={`w-full font-black py-3 rounded-xl transition-all text-xs uppercase cursor-pointer border ${
+                  currentSaveSlot 
+                    ? 'bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border-slate-700 shadow-sm' 
+                    : 'bg-slate-900 text-slate-600 border-slate-850 cursor-not-allowed opacity-50'
+                }`}
+              >
+                Guardar Partida
+              </button>
+
+              {/* LIVE SETTINGS AREA FOR PAUSE MENU */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3.5 text-left">
+                {/* Music Volume control */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-black text-slate-400">
+                    <span>MÚSICA DE FONDO</span>
+                    <span className="font-mono text-sky-400">{Math.round(musicVol * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={musicVol}
+                    onChange={(e) => setMusicVol(parseFloat(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                  />
+                </div>
+
+                {/* SFX Volume control */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] font-black text-slate-400">
+                    <span>EFECTOS DE SONIDO</span>
+                    <span className="font-mono text-sky-400">{Math.round(sfxVol * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={sfxVol}
+                    onChange={(e) => setSfxVol(parseFloat(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+                  />
+                </div>
+
+                {/* Fullscreen inside pause */}
+                <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-2 rounded-xl text-[10px] text-slate-300 font-bold leading-none mt-2">
+                  <span>PANTALLA COMPLETA</span>
+                  <button
+                    onClick={() => {
+                      audio.playUpgrade();
+                      if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen().catch(() => {});
+                      } else {
+                        document.exitFullscreen().catch(() => {});
+                      }
+                    }}
+                    className={`px-3 py-1 font-extrabold rounded-lg text-[9px] uppercase transition cursor-pointer ${
+                      isFullscreen 
+                        ? 'bg-amber-500 text-slate-950 hover:bg-amber-400' 
+                        : 'bg-slate-850 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {isFullscreen ? "ON" : "OFF"}
+                  </button>
+                </div>
+              </div>
+
+              {/* RETURN TO MAIN MENU */}
+              <button
+                id="pause-btn-mainmenu"
+                onClick={() => {
+                  audio.playUpgrade();
+                  setShowExitToMenuConfirm(true);
+                }}
+                className="w-full bg-slate-950 hover:bg-slate-900 text-red-500 border border-red-950 font-bold py-2.5 rounded-xl transition text-[10px] uppercase cursor-pointer"
+              >
+                Volver al Menú Principal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4.5 Tutorial End Modal */}
+      {showTutorialEndModal && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-4 border-amber-500 rounded-[2rem] p-8 sm:p-10 max-w-2xl w-full shadow-[0_0_50px_rgba(245,158,11,0.35)] text-center flex flex-col gap-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600"></div>
+            
+            <div className="flex flex-col items-center gap-3">
+              <span className="text-6xl animate-bounce">🎓🍕🏆</span>
+              <h2 className="text-2xl sm:text-3xl font-black text-amber-400 font-sans tracking-wide uppercase">
+                ¡TUTORIAL COMPLETADO!
+              </h2>
+            </div>
+
+            <p className="text-lg sm:text-2xl font-semibold text-slate-100 leading-relaxed font-sans text-center tracking-normal px-2">
+              ya conoces las mecanicas basicas del juego, ahora reparti pizzas, paga tu renta cada 3 dias y compra el helicoptero para escapar de la isla o iniciar tu propio negocio en la pizzeria abandonada. Suerte!
+            </p>
+
+            <div className="flex justify-center mt-4">
+              <button
+                id="btn-close-tutorial-end"
+                onClick={() => {
+                  setShowTutorialEndModal(false);
+                  audio.playSuccess();
+                }}
+                className="px-10 py-4 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-lg rounded-2xl transition-all duration-150 shadow-[0_6px_25px_rgba(245,158,11,0.4)] uppercase cursor-pointer hover:scale-[1.03] active:scale-[0.98]"
+              >
+                ¡Entendido, a Repartir!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. Helicopters Escape Confirmation Banner */}
       {isEscapeAsking && (
@@ -2208,6 +3312,7 @@ export default function App() {
                 onClick={() => {
                   setMoney(m => m - 10000);
                   setHasOwnPizzeria(true);
+                  setTutorialStep('off'); // Force close initial tutorial if active
                   setPlayerMarketShare(20);
                   setRenovationLevel(0);
                   setIsBuyPizzeriaOpen(false);
@@ -2216,6 +3321,7 @@ export default function App() {
                   setIsCustomizationOpen(true); // Open branding screen!
                   alertBanner("🏠 ¡IMPERIO COMIENZA! Adquiriste la Pizzería Abandonada ($10,000). Define la identidad visual de tu marca.");
                   audio.playCasinoWin();
+                  triggerAutosave();
                 }}
                 className={`w-1/2 py-2.5 rounded-xl font-black text-xs transition uppercase ${
                   money >= 10000 
@@ -2291,10 +3397,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setIsRivalDecisionOpen(false);
-                  setHasGlobalized(true);
-                  setPlayerMarketShare(100);
-                  alertBanner("🌐 ¡GLOBALIZACIÓN EN MARCHA! Te has expandido a mercados internacionales. Tu imperio trasciende mares.");
-                  audio.playCasinoWin();
+                  startChapter3TransitionSequence();
                 }}
                 className="bg-slate-950 border border-slate-800 hover:border-amber-500/50 p-4 rounded-2xl text-center flex flex-col items-center gap-1.5 transition hover:-translate-y-1 cursor-pointer group"
               >
@@ -2307,6 +3410,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setIsRivalDecisionOpen(false);
+                  setVictoryEnding('island_retire');
                   setGameState('victory');
                 }}
                 className="bg-slate-950 border border-slate-800 hover:border-red-500/50 p-4 rounded-2xl text-center flex flex-col items-center gap-1.5 transition hover:-translate-y-1 cursor-pointer group"
@@ -2344,6 +3448,12 @@ export default function App() {
                       setPasswordInput('');
                       alertBanner("🔑 CONEXIÓN COMPLETA: ¡Has cargado secreto de $10,000,000 pizza-dólares adicionales!");
                       audio.playCasinoWin();
+                    } else if (passwordInput === 'skibidi') {
+                      setPlayerMarketShare(100);
+                      setIsCheatOpen(false);
+                      setPasswordInput('');
+                      alertBanner("🔑 CÓDIGO ACTIVO: ¡Tu competencia ha capitulado! Tienes el 100% de la participación de mercado.");
+                      audio.playCasinoWin();
                     } else {
                       alertBanner("❌ ACCESO RECHAZADO: Contraseña incorrecta.");
                       audio.playFail();
@@ -2373,6 +3483,12 @@ export default function App() {
                     setPasswordInput('');
                     alertBanner("🔑 CONEXIÓN COMPLETA: ¡Has cargado secreto de $10,000,000 pizza-dólares adicionales!");
                     audio.playCasinoWin();
+                  } else if (passwordInput === 'skibidi') {
+                    setPlayerMarketShare(100);
+                    setIsCheatOpen(false);
+                    setPasswordInput('');
+                    alertBanner("🔑 CÓDIGO ACTIVO: ¡Tu competencia ha capitulado! Tienes el 100% de la participación de mercado.");
+                    audio.playCasinoWin();
                   } else {
                     alertBanner("❌ ACCESO RECHAZADO: Contraseña incorrecta.");
                     audio.playFail();
@@ -2392,19 +3508,13 @@ export default function App() {
           isOpen={isCustomizationOpen}
           onClose={() => {
             setIsCustomizationOpen(false);
-            const businessShown = localStorage.getItem('business_shown');
-            if (!businessShown) {
-              setBusinessTutorialStep('prompt');
-            }
+            setBusinessTutorialStep('prompt');
           }}
           onSave={(name, color) => {
             setPizzeriaName(name);
             setPizzeriaColor(color);
             setIsCustomizationOpen(false);
-            const businessShown = localStorage.getItem('business_shown');
-            if (!businessShown) {
-              setBusinessTutorialStep('prompt');
-            }
+            setBusinessTutorialStep('prompt');
           }}
           initialName={pizzeriaName}
           initialColor={pizzeriaColor}
@@ -2500,6 +3610,204 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* GLOBAL SLOT DELETION ALERT OVERLAY */}
+      {slotToDeleteConfirm !== null && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-[90]">
+          <div className="bg-slate-950 border-2 border-red-500 p-6 rounded-3xl max-w-sm w-full space-y-4 text-center shadow-2xl relative select-none">
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-950/50 flex items-center justify-center border border-red-500 text-red-500 text-2xl animate-bounce">
+              🗑️
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-md font-black text-slate-100 uppercase">🚨 ¿Borrar Slot {slotToDeleteConfirm}?</h4>
+              <p className="text-xs text-slate-400 font-semibold leading-relaxed text-center">
+                Esta acción es permanente e irreversible. Se perderá todo el progreso acumulado, dinero y mejoras de este slot.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setSlotToDeleteConfirm(null)}
+                className="w-1/2 py-2.5 bg-slate-850 hover:bg-slate-800 rounded-xl font-bold text-xs uppercase text-slate-400 tracking-wider transition cursor-pointer"
+              >
+                No, Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const slot = slotToDeleteConfirm;
+                  setSlotToDeleteConfirm(null);
+                  handleDeleteSaveSlot(slot);
+                }}
+                className="w-1/2 py-2.5 bg-red-650 hover:bg-red-500 text-white rounded-xl font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-[0_3px_0_rgb(185,28,28)] active:translate-y-0.5 active:shadow-none border border-red-600"
+              >
+                Sí, Borrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXIT TO MAIN MENU CONFIRMATION OVERLAY */}
+      {showExitToMenuConfirm && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-[90]">
+          <div className="bg-slate-950 border-2 border-amber-500 p-6 rounded-3xl max-w-sm w-full space-y-4 text-center shadow-2xl relative select-none">
+            <div className="mx-auto w-12 h-12 rounded-full bg-amber-950/50 flex items-center justify-center border border-amber-500 text-amber-500 text-2xl animate-bounce">
+              🚪
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-md font-black text-slate-100 uppercase">🚪 ¿Salir al Menú?</h4>
+              <p className="text-xs text-slate-400 font-semibold leading-relaxed text-center">
+                Asegúrate de haber guardado tu progreso antes de salir. Todo progreso que no se haya guardado se perderá definitivamente.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setShowExitToMenuConfirm(false)}
+                className="w-1/2 py-2.5 bg-slate-850 hover:bg-slate-800 rounded-xl font-bold text-xs uppercase text-slate-400 tracking-wider transition cursor-pointer"
+              >
+                No, Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowExitToMenuConfirm(false);
+                  setIsPaused(false);
+                  setGameState('menu');
+                  setMenuScreen('main');
+                }}
+                className="w-1/2 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-[0_3px_0_rgb(146,64,14)] active:translate-y-0.5 active:shadow-none border border-amber-400"
+              >
+                Sí, Salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHAPTER 3 TRANSITION OVERLAY */}
+      {showChapter3Transition && (
+        <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-[100] flex flex-col items-center justify-center p-6 select-none overflow-hidden font-sans">
+          {/* Animated matrix / radial background glow */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.12)_0%,rgba(0,0,0,0)_70%)] animate-pulse pointer-events-none" />
+          <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent top-1/2 animate-pulse" />
+
+          {/* Core Content Box with gorgeous cinematic presentation */}
+          <div className="max-w-xl w-full text-center space-y-8 z-10 animate-fade-in">
+            {/* Spinning global/hologram icon represent world domain */}
+            <div className="relative mx-auto w-28 h-28 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-cyan-500/30 animate-ping" />
+              <div className="absolute inset-1.5 rounded-full border border-sky-400/20 animate-spin [animation-duration:8s]" />
+              <div className="absolute inset-3 rounded-full bg-cyan-950/40 border-2 border-cyan-400/80 shadow-[0_0_24px_rgba(34,211,238,0.3)] flex items-center justify-center text-5xl">
+                🌐
+              </div>
+            </div>
+
+            {/* Title blocks */}
+            <div className="space-y-2.5">
+              <div className="text-cyan-400 font-extrabold tracking-[0.25em] text-xs uppercase animate-pulse">
+                CAPÍTULO 3
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black text-slate-150 tracking-widest font-serif uppercase bg-gradient-to-b from-white to-slate-400 bg-clip-text text-transparent">
+                DOMINIO MUNDIAL
+              </h2>
+            </div>
+
+            {/* Divider */}
+            <div className="w-16 h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent mx-auto rounded-full" />
+
+            {/* Description quote */}
+            <p className="text-sm sm:text-base text-slate-350 italic font-medium leading-relaxed max-w-md mx-auto">
+              "Has conquistado la isla. Es hora de expandir tu empresa y convertirte en una potencia mundial."
+            </p>
+
+            {/* Loading / Fading global lines status indicator */}
+            <div className="pt-4 flex flex-col items-center gap-2">
+              <div className="flex gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-bounce" />
+              </div>
+              <p className="text-[10px] text-cyan-600 font-black uppercase tracking-widest">
+                CONECTANDO RED GLOBAL... ESPERE
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TERRITORY LANDING OVERLAY */}
+      {landingRegionId !== null && (
+        (() => {
+          const reg = TERRITORIES.find(r => r.id === landingRegionId);
+          if (!reg) return null;
+          return (
+            <div className="fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-[100] flex flex-col items-center justify-center p-6 select-none overflow-hidden font-sans">
+              {/* Radial glow styled with region accent/color */}
+              <div 
+                className="absolute inset-0 opacity-20 pointer-events-none"
+                style={{
+                  backgroundImage: `radial-gradient(circle at center, ${reg.color} 0%, rgba(0,0,0,0) 75%)`,
+                  animation: 'pulse 3s infinite'
+                }}
+              />
+              <div 
+                className="absolute inset-x-0 h-0.5 opacity-30"
+                style={{
+                  background: `linear-gradient(to right, transparent, ${reg.accent}, transparent)`,
+                  top: '50%',
+                  animation: 'pulse 1.5s infinite'
+                }}
+              />
+
+              {/* Core Content Container */}
+              <div className="max-w-md w-full text-center space-y-6 z-10 animate-fade-in">
+                {/* Helicopter / Landing gear visual */}
+                <div 
+                  className="relative mx-auto w-24 h-24 flex items-center justify-center rounded-full border-4 animate-spin [animation-duration:6s]"
+                  style={{ borderColor: reg.color, boxShadow: `0 0 20px ${reg.color}40` }}
+                >
+                  <span className="text-3.5xl">🚁</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div 
+                    className="font-extrabold tracking-[0.25em] text-[10px] sm:text-xs uppercase"
+                    style={{ color: reg.accent }}
+                  >
+                    SISTEMA DE NAVEGACIÓN GPS INDIVIDUAL
+                  </div>
+                  <h2 className="text-3xl sm:text-4xl font-black text-white tracking-widest uppercase font-serif">
+                    {reg.name}
+                  </h2>
+                  <p className="text-[10px] text-slate-450 font-extrabold tracking-widest uppercase">
+                    CORRELACIÓN: ({reg.cx}N, {reg.cy}E)
+                  </p>
+                </div>
+
+                {/* Elegant loading progress bar */}
+                <div className="space-y-2 w-72 mx-auto">
+                  <div className="w-full h-2 bg-slate-900 rounded-[99px] overflow-hidden border border-slate-800 p-0.5">
+                    <div 
+                      className="h-full rounded-[99px]"
+                      style={{ 
+                        backgroundColor: reg.color, 
+                        boxShadow: `0 0 10px ${reg.accent}`,
+                        animation: 'fillProgress 2.6s ease-out forwards'
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] font-black text-slate-350 uppercase tracking-widest animate-pulse">
+                    ATERRIZANDO EN LA REGIÓN...
+                  </p>
+                </div>
+
+                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest leading-relaxed">
+                  Estableciendo base de operaciones temporal <br />
+                  y configurando canal de entrega local
+                </div>
+              </div>
+            </div>
+          );
+        })()
       )}
 
     </div>

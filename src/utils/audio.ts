@@ -6,9 +6,11 @@
 class AudioManager {
   private ctx: AudioContext | null = null;
   private muted: boolean = false;
+  private musicVolume: number = 0.5;
+  private sfxVolume: number = 0.5;
   private bgmInterval: any = null;
   private bgmStep: number = 0;
-  private bgmPlaying: boolean = false;
+  private bgmPlaying: 'none' | 'game' | 'menu' | 'chapter3' = 'none';
 
   private init() {
     if (!this.ctx) {
@@ -30,7 +32,23 @@ class AudioManager {
     return this.muted;
   }
 
-  private playTone(freq: number, type: OscillatorType, duration: number, volume: number = 0.1, slideToFreq?: number) {
+  setMusicVolume(vol: number) {
+    this.musicVolume = Math.max(0, Math.min(1, vol));
+  }
+
+  getMusicVolume() {
+    return this.musicVolume;
+  }
+
+  setSfxVolume(vol: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, vol));
+  }
+
+  getSfxVolume() {
+    return this.sfxVolume;
+  }
+
+  private playTone(freq: number, type: OscillatorType, duration: number, volume: number = 0.1, slideToFreq?: number, isBgm: boolean = false) {
     try {
       this.init();
       if (!this.ctx || this.muted) return;
@@ -45,8 +63,10 @@ class AudioManager {
         osc.frequency.exponentialRampToValueAtTime(slideToFreq, this.ctx.currentTime + duration);
       }
 
-      gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+      // Apply the separate volume variables
+      const calculatedVol = volume * (isBgm ? this.musicVolume : this.sfxVolume);
+      gainNode.gain.setValueAtTime(calculatedVol, this.ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
 
       osc.connect(gainNode);
       gainNode.connect(this.ctx.destination);
@@ -141,7 +161,6 @@ class AudioManager {
   }
 
   playEngine(speedRatio: number) {
-    // We can play a tiny quick tick to simulate motor sound, but avoid over-playing details
     if (Math.random() < 0.15 && speedRatio > 0.1) {
       const freq = 60 + speedRatio * 110;
       this.playTone(freq, 'triangle', 0.04, 0.015);
@@ -150,8 +169,9 @@ class AudioManager {
 
   startBGM() {
     this.init();
-    if (this.bgmPlaying) return;
-    this.bgmPlaying = true;
+    if (this.bgmPlaying === 'game') return;
+    this.stopBGM();
+    this.bgmPlaying = 'game';
     this.bgmStep = 0;
 
     const melody = [
@@ -168,7 +188,7 @@ class AudioManager {
       98.00, 146.83, 98.00, 146.83, 130.81, 196.00, 130.81, 0
     ];
 
-    const stepTime = 160; // Upbeat and quick 160ms steps
+    const stepTime = 160;
 
     this.bgmInterval = setInterval(() => {
       if (this.muted || !this.ctx || this.ctx.state === 'suspended') {
@@ -179,14 +199,94 @@ class AudioManager {
       const note = melody[this.bgmStep];
       const bassNote = bass[this.bgmStep];
 
-      // Play soft melody note (sine style chiptune)
       if (note > 0) {
-        this.playTone(note, 'sine', stepTime / 1000 * 0.8, 0.015);
+        this.playTone(note, 'sine', stepTime / 1000 * 0.8, 0.015, undefined, true);
       }
 
-      // Play alternating soft retro bassline (warm triangle)
       if (bassNote > 0 && this.bgmStep % 2 === 0) {
-        this.playTone(bassNote, 'triangle', stepTime / 1000 * 1.4, 0.012);
+        this.playTone(bassNote, 'triangle', stepTime / 1000 * 1.4, 0.012, undefined, true);
+      }
+
+      this.bgmStep = (this.bgmStep + 1) % melody.length;
+    }, stepTime);
+  }
+
+  startMenuBGM() {
+    this.init();
+    if (this.bgmPlaying === 'menu') return;
+    this.stopBGM();
+    this.bgmPlaying = 'menu';
+    this.bgmStep = 0;
+
+    // A rising, hopeful progress progression (C -> G -> Am -> F chords with inspiring feel)
+    // We can have 32 steps of inspiring chords and arpeggiator
+    const chords = [
+      [261.63, 329.63, 392.00, 523.25], // C Major
+      [196.00, 293.66, 392.00, 493.88], // G Major
+      [220.00, 261.63, 329.63, 440.00], // A Minor
+      [174.61, 220.00, 261.63, 349.23], // F Major
+    ];
+
+    const bassNotes = [130.81, 98.00, 110.00, 87.31]; // C2, G1, A1, F1
+
+    const stepTime = 200; // slightly slower, very epic tempo
+    this.bgmInterval = setInterval(() => {
+      if (this.muted || !this.ctx || this.ctx.state === 'suspended') {
+        this.bgmStep = (this.bgmStep + 1) % 16;
+        return;
+      }
+
+      const chordIdx = Math.floor(this.bgmStep / 4) % chords.length;
+      const stepInChord = this.bgmStep % 4;
+      const currentChord = chords[chordIdx];
+
+      // Arpeggiator note
+      const note = currentChord[stepInChord];
+      
+      // Play ascending sparkling arpeggio notes
+      this.playTone(note, 'sine', stepTime / 1000 * 1.5, 0.018, undefined, true);
+
+      // Warm bass cushion on the first step of each chord transition
+      if (stepInChord === 0) {
+        this.playTone(bassNotes[chordIdx], 'triangle', stepTime / 1000 * 3.5, 0.022, undefined, true);
+      }
+
+      this.bgmStep = (this.bgmStep + 1) % 16;
+    }, stepTime);
+  }
+
+  startChapter3BGM() {
+    this.init();
+    if (this.bgmPlaying === 'chapter3') return;
+    this.stopBGM();
+    this.bgmPlaying = 'chapter3';
+    this.bgmStep = 0;
+
+    // A futuristic, epic corporate-dominance arpeggiated expansion theme
+    const melody = [
+      440.00, 523.25, 659.25, 523.25, 493.88, 587.33, 739.99, 587.33,
+      349.23, 440.00, 523.25, 440.00, 392.00, 493.88, 587.33, 493.88
+    ];
+    const bass = [
+      110.00, 0, 110.00, 0, 123.47, 0, 123.47, 0,
+      87.31, 0, 87.31, 0, 98.00, 0, 98.00, 0
+    ];
+
+    const stepTime = 140;
+    this.bgmInterval = setInterval(() => {
+      if (this.muted || !this.ctx || this.ctx.state === 'suspended') {
+        this.bgmStep = (this.bgmStep + 1) % melody.length;
+        return;
+      }
+
+      const note = melody[this.bgmStep];
+      const bassNote = bass[this.bgmStep];
+
+      if (note > 0) {
+        this.playTone(note, 'sine', stepTime / 1000 * 0.95, 0.015, undefined, true);
+      }
+      if (bassNote > 0) {
+         this.playTone(bassNote, 'triangle', stepTime / 1000 * 1.5, 0.022, undefined, true);
       }
 
       this.bgmStep = (this.bgmStep + 1) % melody.length;
@@ -194,7 +294,7 @@ class AudioManager {
   }
 
   stopBGM() {
-    this.bgmPlaying = false;
+    this.bgmPlaying = 'none';
     if (this.bgmInterval) {
       clearInterval(this.bgmInterval);
       this.bgmInterval = null;

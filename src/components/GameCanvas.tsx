@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useEffect, useState } from 'react';
-import { House, Obstacle, Vagabond, VehicleId, Order } from '../types';
+import { House, Obstacle, Vagabond, VehicleId, Order, TERRITORIES, getTerritoryAt } from '../types';
 import { audio } from '../utils/audio';
 
 function adjustHexColor(hex: string, percent: number): string {
@@ -49,6 +49,9 @@ interface GameCanvasProps {
   hasGlobalized: boolean;
   tutorialStep?: 'off' | 'prompt' | 'pizzeria' | 'delivery' | 'concesionario' | 'casino' | 'completed';
   businessTutorialStep?: 'off' | 'prompt' | 'upgrades' | 'competition' | 'staff' | 'completed';
+  chapter?: number;
+  insideRegionId?: number | null;
+  onClickRegion?: (regionId: number) => void;
 }
 
 // 3D Projection & Painter utility types
@@ -95,6 +98,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   hasGlobalized,
   tutorialStep = 'off',
   businessTutorialStep = 'off',
+  chapter = 1,
+  insideRegionId = null,
+  onClickRegion,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -144,6 +150,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     hasGlobalized,
     tutorialStep,
     businessTutorialStep,
+    chapter,
+    insideRegionId,
   });
 
   renderStateRef.current = {
@@ -168,6 +176,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     hasGlobalized,
     tutorialStep,
     businessTutorialStep,
+    chapter,
+    insideRegionId,
   };
 
   // Camera coordinates (lerping towards player)
@@ -193,13 +203,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         rotorAngleRef.current = (rotorAngleRef.current + dt * 25) % (Math.PI * 2);
       }
 
-      // Smooth camera follow (lerp towards player)
-      cameraRef.current.x += (state.playerX - cameraRef.current.x) * 0.08;
-      // Camera is placed south of the player to create a gorgeous 3/4 diagonal perspective look
-      const targetCamY = state.playerY + 85;
+      // Smooth camera follow or fixed/responsive overhead overview
+      const isChapter3 = state.chapter === 3;
+      let targetCamX = state.playerX;
+      let targetCamY = state.playerY + 85;
+      let targetCamZ = 70;
+
+      if (isChapter3) {
+        if (state.insideRegionId !== null && state.insideRegionId !== undefined) {
+          // Camera follow player inside region
+          targetCamX = state.playerX;
+          targetCamY = state.playerY + 85;
+          targetCamZ = 70;
+        } else {
+          // Center the camera static view between the two islands
+          targetCamX = 260;
+          targetCamY = 0;
+          // Dynamically compute altitude based on width so both islands remain in full visual range
+          const cw = canvasRef.current ? canvasRef.current.width : 1000;
+          targetCamZ = Math.max(520, (680 * 800) / Math.max(300, cw));
+        }
+      }
+
+      cameraRef.current.x += (targetCamX - cameraRef.current.x) * 0.08;
       cameraRef.current.y += (targetCamY - cameraRef.current.y) * 0.08;
-      // Altitude changes based on whether helicopter is flying
-      const targetCamZ = (state.currentVehicleId === 'helicoptero') ? 110 : 70;
       cameraRef.current.z += (targetCamZ - cameraRef.current.z) * 0.08;
 
       render();
@@ -219,6 +246,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     pitch: number = 0.85, // Perfect comfortable 3/4 diagonal Tilt X (approx. 50 degrees)
     yaw: number = 0.0     // Perfect 0.0 grid alignment for easy navigation
   ) => {
+    const isChapter3 = renderStateRef.current?.chapter === 3;
+    if (isChapter3) {
+      // Clean top-down 2D perspective / orthographic projection for Chapter 3
+      const dx = val.x - cameraRef.current.x;
+      const dy = val.y - cameraRef.current.y;
+      const dz = val.z; // world altitude above sea level (z)
+
+      // Dynamic scale matching the responsive Z of the camera
+      const scale = 400 / cameraRef.current.z;
+
+      return {
+        x: width / 2 + dx * scale,
+        y: height / 2 + dy * scale - dz * scale * 0.12, // shift height upwards proportionately for clean 3D feel
+        depth: -val.y - val.z, // roofs smaller (drawn last/on top of floor)
+      };
+    }
+
     const dx = val.x - cameraRef.current.x;
     const dy = val.y - cameraRef.current.y;
     const dz = val.z - cameraRef.current.z;
@@ -238,7 +282,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const sz = -ry * Math.sin(pitch) - rz * Math.cos(pitch);
 
     // Standard high-fidelity 3D perspective scaling factor
-    const zoom = 1.95;
+    const zoom = 1.45;
     const distanceFactor = 400;
     // Clamp the denominator to a positive, safe minimum to avoid division by zero or negative flip projection glitches
     const denom = Math.max(10, distanceFactor + sz);
@@ -253,6 +297,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Check proximity interactions
   useEffect(() => {
+    if (chapter === 3) {
+      setActivePrompt('none');
+      onInteract('none');
+      return;
+    }
+
     // Distance to shop zones
     const distPizza = Math.sqrt((playerX - PIZZERIA_X) ** 2 + (playerY - PIZZERIA_Y) ** 2);
     const distDealer = Math.sqrt((playerX - DEALER_X) ** 2 + (playerY - DEALER_Y) ** 2);
@@ -292,7 +342,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       });
     }
-  }, [playerX, playerY, currentVehicleId, hasOwnPizzeria, playerMarketShare]);
+  }, [playerX, playerY, currentVehicleId, hasOwnPizzeria, playerMarketShare, chapter]);
 
 
   // RENDERING ENGINE
@@ -328,14 +378,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       hasGlobalized,
       tutorialStep,
       businessTutorialStep,
+      chapter,
+      insideRegionId,
     } = renderStateRef.current;
 
-    // Clear Canvas with lovely clear blue sky/ocean background
-    ctx.fillStyle = '#C0E4FF';
+    // Clear Canvas: inside region should be ONLY grass. No ocean.
+    if (chapter === 3 && insideRegionId !== null) {
+      const regObj = TERRITORIES.find(r => r.id === insideRegionId);
+      const rColor = regObj ? regObj.color : '#15803D';
+      ctx.fillStyle = rColor;
+    } else {
+      ctx.fillStyle = '#C0E4FF'; // Ocean blue/sky
+    }
     ctx.fillRect(0, 0, width, height);
 
-    // Setup tilted camera settings
-    const pitch = 0.85; 
+    // Setup tilted camera settings. Chapter 3 goes top-down (almost vertical 1.48) on global map, tilted inside regions or other chapters
+    const pitch = (chapter === 3 && insideRegionId === null) ? 1.48 : 0.85; 
     const yaw = 0.0;
 
     const proj = (p: Point3D) => projectPoint(p, width, height, pitch, yaw);
@@ -480,83 +538,184 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     // DRAW FLAT GROUND GRAPHICS (Pre-painted directly under the painter list as subdivided tiles)
-    // Map bounds: -500 to 500
     const sandColor = '#FEF08A';
     const tileSize = 80;
 
-    // Draw sand shoreline as tiled grid to prevent projection flips when player goes far or near edges
-    for (let gx = -960; gx < 960; gx += tileSize) {
-      for (let gy = -960; gy < 960; gy += tileSize) {
-        const pts = [
-          { x: gx, y: gy, z: -1 },
-          { x: gx + tileSize, y: gy, z: -1 },
-          { x: gx + tileSize, y: gy + tileSize, z: -1 },
-          { x: gx, y: gy + tileSize, z: -1 },
-        ];
+    const drawSandTile = (gx: number, gy: number) => {
+      const pts = [
+        { x: gx, y: gy, z: -1 },
+        { x: gx + tileSize, y: gy, z: -1 },
+        { x: gx + tileSize, y: gy + tileSize, z: -1 },
+        { x: gx, y: gy + tileSize, z: -1 },
+      ];
 
-        let hasBehind = false;
-        pts.forEach(p => {
+      let hasBehind = false;
+      pts.forEach(p => {
+        const dx = p.x - cameraRef.current.x;
+        const dy = p.y - cameraRef.current.y;
+        const dz = p.z - cameraRef.current.z;
+        const ry = dy;
+        const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
+        if (400 + sz < 15) {
+          hasBehind = true;
+        }
+      });
+
+      if (hasBehind) return;
+
+      const prjPts = pts.map(proj);
+      ctx.beginPath();
+      ctx.moveTo(prjPts[0].x, prjPts[0].y);
+      ctx.lineTo(prjPts[1].x, prjPts[1].y);
+      ctx.lineTo(prjPts[2].x, prjPts[2].y);
+      ctx.lineTo(prjPts[3].x, prjPts[3].y);
+      ctx.closePath();
+      ctx.fillStyle = sandColor;
+      ctx.fill();
+    };
+
+    const drawGrassTile = (gx: number, gy: number, customColor?: string, isCeoFinal?: boolean) => {
+      const pts = [
+        { x: gx, y: gy, z: 0 },
+        { x: gx + 60, y: gy, z: 0 },
+        { x: gx + 60, y: gy + 60, z: 0 },
+        { x: gx, y: gy + 60, z: 0 },
+      ];
+
+      let hasBehind = false;
+      pts.forEach(p => {
+        const dx = p.x - cameraRef.current.x;
+        const dy = p.y - cameraRef.current.y;
+        const dz = p.z - cameraRef.current.z;
+        const ry = dy;
+        const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
+        if (400 + sz < 15) {
+          hasBehind = true;
+        }
+      });
+
+      if (hasBehind && chapter !== 3) return;
+
+      const prjPts = pts.map(proj);
+      ctx.beginPath();
+      ctx.moveTo(prjPts[0].x, prjPts[0].y);
+      ctx.lineTo(prjPts[1].x, prjPts[1].y);
+      ctx.lineTo(prjPts[2].x, prjPts[2].y);
+      ctx.lineTo(prjPts[3].x, prjPts[3].y);
+      ctx.closePath();
+      ctx.fillStyle = customColor || '#49A06D';
+      ctx.fill();
+
+      if (isCeoFinal) {
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    };
+
+    if (chapter === 3) {
+      if (insideRegionId !== null) {
+        // ---- 1. RENDER LOCAL TEST MAP FOR REGIONS (Only spacious grass baseplate, no ocean, no other islands) ----
+        // Find region colors
+        const reg = TERRITORIES.find(r => r.id === insideRegionId);
+        const rColor = reg ? reg.color : '#49A06D';
+        const isCeo = insideRegionId === 8;
+        
+        // Render empty clean grass grid as baseplate from -540 to 540 (covers the active interactive area + buffer)
+        for (let gx = -540; gx < 540; gx += 60) {
+          for (let gy = -540; gy < 540; gy += 60) {
+            drawGrassTile(gx, gy, rColor, isCeo);
+          }
+        }
+      } else {
+        // ---- 2. RENDER GLOBAL OPERATIONS MAP FOR CHAPTER 3 ----
+        // SMALL ISLAND (SHRUNK): Sand from -360 to -120, and -120 to 120
+        for (let gx = -360; gx < -120; gx += tileSize) {
+          for (let gy = -120; gy < 120; gy += tileSize) {
+            drawSandTile(gx, gy);
+          }
+        }
+        // LARGE ISLAND (EXPANDED): Sand from 0 to 880, and -540 to 540
+        for (let gx = 0; gx < 880; gx += tileSize) {
+          for (let gy = -540; gy < 540; gy += tileSize) {
+            drawSandTile(gx, gy);
+          }
+        }
+
+        // SMALL ISLAND (SHRUNK): Grass from -300 to -180, and -90 to 90
+        for (let gx = -300; gx < -180; gx += 60) {
+          for (let gy = -90; gy < 90; gy += 60) {
+            drawGrassTile(gx, gy);
+          }
+        }
+        // LARGE ISLAND (EXPANDED): Grass divided into 8 organic asymmetrical territories!
+        for (let gx = 80; gx < 800; gx += 60) {
+          for (let gy = -480; gy < 480; gy += 60) {
+            const t = getTerritoryAt(gx + 30, gy + 30);
+            const color = t ? t.color : '#49A06D';
+            const isCeo = t?.id === 8;
+            drawGrassTile(gx, gy, color, isCeo);
+          }
+        }
+
+        // Thin transparent layer on small island representing corporate domain
+        let transColor = 'rgba(56, 189, 248, 0.22)';
+        if (pizzeriaColor && pizzeriaColor.startsWith('#')) {
+          transColor = pizzeriaColor + '40'; // ~25% alpha hex
+        } else if (pizzeriaColor) {
+          transColor = pizzeriaColor;
+        }
+
+        const overlayPts = [
+          { x: -300, y: -90, z: 0.15 },
+          { x: -180, y: -90, z: 0.15 },
+          { x: -180, y: 90, z: 0.15 },
+          { x: -300, y: 90, z: 0.15 },
+        ];
+        let overlayBehind = false;
+        overlayPts.forEach(p => {
           const dx = p.x - cameraRef.current.x;
           const dy = p.y - cameraRef.current.y;
           const dz = p.z - cameraRef.current.z;
           const ry = dy;
-          const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+          const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
           if (400 + sz < 15) {
-            hasBehind = true;
+            overlayBehind = true;
           }
         });
+        if (!overlayBehind) {
+          const prjOverlay = overlayPts.map(proj);
+          ctx.beginPath();
+          ctx.moveTo(prjOverlay[0].x, prjOverlay[0].y);
+          ctx.lineTo(prjOverlay[1].x, prjOverlay[1].y);
+          ctx.lineTo(prjOverlay[2].x, prjOverlay[2].y);
+          ctx.lineTo(prjOverlay[3].x, prjOverlay[3].y);
+          ctx.closePath();
+          ctx.fillStyle = transColor;
+          ctx.fill();
 
-        if (hasBehind) continue;
-
-        const prjPts = pts.map(proj);
-        ctx.beginPath();
-        ctx.moveTo(prjPts[0].x, prjPts[0].y);
-        ctx.lineTo(prjPts[1].x, prjPts[1].y);
-        ctx.lineTo(prjPts[2].x, prjPts[2].y);
-        ctx.lineTo(prjPts[3].x, prjPts[3].y);
-        ctx.closePath();
-        ctx.fillStyle = sandColor;
-        ctx.fill();
+          // Elegant border for corporate dominance boundaries
+          ctx.strokeStyle = pizzeriaColor || '#0284C7';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+      }
+    } else {
+      // CHAPTER 1 & 2 FULL ORIGINAL ISLAND
+      for (let gx = -960; gx < 960; gx += tileSize) {
+        for (let gy = -960; gy < 960; gy += tileSize) {
+          drawSandTile(gx, gy);
+        }
+      }
+      for (let gx = -900; gx < 900; gx += 60) {
+        for (let gy = -900; gy < 900; gy += 60) {
+          drawGrassTile(gx, gy);
+        }
       }
     }
 
-    // Draw green island grass as tiled grid to prevent projection flips when player goes far or near edges
-    for (let gx = -900; gx < 900; gx += 60) {
-      for (let gy = -900; gy < 900; gy += 60) {
-        const pts = [
-          { x: gx, y: gy, z: 0 },
-          { x: gx + 60, y: gy, z: 0 },
-          { x: gx + 60, y: gy + 60, z: 0 },
-          { x: gx, y: gy + 60, z: 0 },
-        ];
-
-        let hasBehind = false;
-        pts.forEach(p => {
-          const dx = p.x - cameraRef.current.x;
-          const dy = p.y - cameraRef.current.y;
-          const dz = p.z - cameraRef.current.z;
-          const ry = dy;
-          const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
-          if (400 + sz < 15) {
-            hasBehind = true;
-          }
-        });
-
-        if (hasBehind) continue;
-
-        const prjPts = pts.map(proj);
-        ctx.beginPath();
-        ctx.moveTo(prjPts[0].x, prjPts[0].y);
-        ctx.lineTo(prjPts[1].x, prjPts[1].y);
-        ctx.lineTo(prjPts[2].x, prjPts[2].y);
-        ctx.lineTo(prjPts[3].x, prjPts[3].y);
-        ctx.closePath();
-        ctx.fillStyle = '#49A06D';
-        ctx.fill();
-      }
-    }
-
-    // DRAW STREETS & ROADS (Tarmac grey - subdivided segment-by-segment to prevent projection stretching)
+    if (chapter !== 3) {
+      // DRAW STREETS & ROADS (Tarmac grey - subdivided segment-by-segment to prevent projection stretching)
     const STREET_COORDS = [-818, -613, -368, -123, 123, 368, 613, 818];
     const STREET_WIDTH = 22;
 
@@ -602,7 +761,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const dy = p.y - cameraRef.current.y;
             const dz = p.z - cameraRef.current.z;
             const ry = dy;
-            const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+            const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
             if (400 + sz < 15) {
               hasBehind = true;
             }
@@ -648,7 +807,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const dy = p.y - cameraRef.current.y;
             const dz = p.z - cameraRef.current.z;
             const ry = dy;
-            const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
+            const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
             if (400 + sz < 15) {
               hasBehind = true;
             }
@@ -865,7 +1024,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       rivalWallColor = pizzeriaColor;
       rivalSideColor = adjustHexColor(pizzeriaColor, -0.2);
       rivalPeakColorLighter = adjustHexColor(pizzeriaColor, 0.2);
-      rivalPeakColorDarker = adjustHexColor(pizzeriaColor, -0.15);
+      rivalPeakColorDarker = adjustHexColor(pizzeriaColor, 0.2);
     } else if (hasOwnPizzeria) {
       rivalPizzaLabel = '🍕 PIZZERÍA RIVAL';
     }
@@ -889,30 +1048,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       let peakColor = '#1E40AF';
 
       if (hasOwnPizzeria) {
+        topColor = pizzeriaColor;
+        wallColor = pizzeriaColor;
+        sideColor = adjustHexColor(pizzeriaColor, -0.2);
+        peakColor = adjustHexColor(pizzeriaColor, 0.2);
+
         if (renovationLevel === 0) {
           ownPizzaLabel = `🏚️ ${pizzeriaName} (NIVEL 0)`;
-          topColor = adjustHexColor(pizzeriaColor, -0.4);
-          wallColor = adjustHexColor(pizzeriaColor, -0.5);
-          sideColor = adjustHexColor(pizzeriaColor, -0.6);
-          peakColor = adjustHexColor(pizzeriaColor, -0.3);
         } else if (renovationLevel === 1) {
           ownPizzaLabel = `🍕 ${pizzeriaName} (L1)`;
-          topColor = pizzeriaColor;
-          wallColor = pizzeriaColor;
-          sideColor = adjustHexColor(pizzeriaColor, -0.2);
-          peakColor = adjustHexColor(pizzeriaColor, 0.2);
         } else if (renovationLevel === 2) {
           ownPizzaLabel = `🍕 ${pizzeriaName} (L2)`;
-          topColor = adjustHexColor(pizzeriaColor, 0.1);
-          wallColor = adjustHexColor(pizzeriaColor, 0.1);
-          sideColor = adjustHexColor(pizzeriaColor, -0.1);
-          peakColor = adjustHexColor(pizzeriaColor, 0.3);
         } else {
           ownPizzaLabel = `⚡ ${pizzeriaName} (L3) ⚡`;
-          topColor = adjustHexColor(pizzeriaColor, 0.25);
-          wallColor = adjustHexColor(pizzeriaColor, 0.25);
-          sideColor = adjustHexColor(pizzeriaColor, 0.05);
-          peakColor = adjustHexColor(pizzeriaColor, 0.45);
         }
       }
 
@@ -958,7 +1106,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         top: wallSideColor,
         front: wallColor,
         side: wallSideColor,
-      }, house.style * 0.45, `Casa ${house.number}`);
+      }, house.style * 0.45, isRedeemingTarget ? `Casa ${house.number}` : undefined);
 
       // Push distinct roof structure
       if (house.style % 2 === 0) {
@@ -1089,19 +1237,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         avgDepth: avgDS,
       });
 
-      // Match player's pizzeria business upgrade colors
-      let empColors = { top: '#2563EB', front: '#2563EB', side: '#1D4ED8' };
-      if (hasOwnPizzeria) {
-        if (renovationLevel === 0) {
-          empColors = { top: '#1E3A8A', front: '#1E293B', side: '#0F172A' };
-        } else if (renovationLevel === 1) {
-          empColors = { top: '#2563EB', front: '#2563EB', side: '#1D4ED8' };
-        } else if (renovationLevel === 2) {
-          empColors = { top: '#3B82F6', front: '#3B82F6', side: '#2563EB' };
-        } else {
-          empColors = { top: '#06B6D4', front: '#06B6D4', side: '#0891B2' };
-        }
-      }
+      // Match player's custom brand color exactly
+      const empColors = {
+        top: pizzeriaColor,
+        front: pizzeriaColor,
+        side: adjustHexColor(pizzeriaColor, -0.2)
+      };
 
       // Employee 3D model box (smaller size, same color as player's clinic, no name tag)
       push3DBox(eX, eY, 0, 5, 5, 5, empColors, 0, undefined);
@@ -1130,13 +1271,138 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         avgDepth: avgDS,
       });
 
-      // Original/Rival Delivery Boy 3D model box (mini person dressed in red! matched to rival pizzeria colors, no tag)
-      push3DBox(dX, dY, 0, 5, 5, 5, {
-        top: '#EF4444',   // bright red
-        front: '#EF4444', // red body (matched)
-        side: '#B91C1C',  // dark red trim
-      }, 0, undefined);
+      // Match player's custom brand color if they have bought the own pizzeria or globalized
+      const rivalColors = (hasOwnPizzeria || hasGlobalized)
+        ? {
+            top: pizzeriaColor,
+            front: pizzeriaColor,
+            side: adjustHexColor(pizzeriaColor, -0.2),
+          }
+        : {
+            top: '#EF4444',   // bright red
+            front: '#EF4444', // red body (matched)
+            side: '#B91C1C',  // dark red trim
+          };
+
+      // Original/Rival Delivery Boy 3D model box (mini person dressed in custom/rival brand colors, no tag)
+      push3DBox(dX, dY, 0, 5, 5, 5, rivalColors, 0, undefined);
     });
+    } else {
+      // CHAPTER 3 MAP: CUSTOM LANDMARKS, HQ AND REGIONS
+      if (insideRegionId !== null) {
+        // Draw flat central helipad for reference landing base inside region
+        const t = TERRITORIES.find(r => r.id === insideRegionId);
+        const tName = t ? t.name : 'ZONA DE PRUEBA';
+        const tColor = t ? t.color : '#EF4444';
+        
+        const numPts = 12;
+        const padPts: Point3D[] = [];
+        for (let i = 0; i < numPts; i++) {
+          const a = (i / numPts) * Math.PI * 2;
+          padPts.push({
+            x: 0 + Math.cos(a) * 45,
+            y: 0 + Math.sin(a) * 45,
+            z: 0.3,
+          });
+        }
+        const depthsPrj = padPts.map(proj);
+        const avgD = depthsPrj.reduce((sum, p) => sum + p.depth, 0) / padPts.length;
+
+        faces.push({
+          points: padPts,
+          color: '#1E293B',
+          outlineColor: tColor,
+          outlineWidth: 4,
+          avgDepth: avgD,
+          text: `🚁 HELIPUERTO ${tName.toUpperCase()}`,
+        });
+
+        // DRAW VISIBLE BOUNDARY: Laser Fences & High-Tech Glowing Pylons along -480 and 480
+        const limitVal = 480;
+        const segmentSize = 160;
+
+        // Generate segmented wall faces to prevent projection stretching
+        const wallSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
+
+        // Top edge
+        for (let x = -limitVal; x < limitVal; x += segmentSize) {
+          wallSegments.push({ x1: x, y1: -limitVal, x2: x + segmentSize, y2: -limitVal });
+        }
+        // Bottom edge
+        for (let x = -limitVal; x < limitVal; x += segmentSize) {
+          wallSegments.push({ x1: x, y1: limitVal, x2: x + segmentSize, y2: limitVal });
+        }
+        // Left edge
+        for (let y = -limitVal; y < limitVal; y += segmentSize) {
+          wallSegments.push({ x1: -limitVal, y1: y, x2: -limitVal, y2: y + segmentSize });
+        }
+        // Right edge
+        for (let y = -limitVal; y < limitVal; y += segmentSize) {
+          wallSegments.push({ x1: limitVal, y1: y, x2: limitVal, y2: y + segmentSize });
+        }
+
+        wallSegments.forEach((seg) => {
+          // Semi-transparent laser wall height = 22
+          const wallPts = [
+            { x: seg.x1, y: seg.y1, z: 0.2 },
+            { x: seg.x2, y: seg.y2, z: 0.2 },
+            { x: seg.x2, y: seg.y2, z: 22 },
+            { x: seg.x1, y: seg.y1, z: 22 },
+          ];
+
+          const depthsW = wallPts.map(proj);
+          const avgDW = depthsW.reduce((sum, p) => sum + p.depth, 0) / wallPts.length;
+
+          faces.push({
+            points: wallPts,
+            color: `${tColor}1c`, // 10% opacity colored laser membrane
+            outlineColor: tColor,
+            outlineWidth: 2,
+            avgDepth: avgDW,
+          });
+        });
+
+        // High-tech decorative glowing corner/edge pylons
+        const pylonPoints: { x: number; y: number }[] = [];
+        for (let x = -limitVal; x <= limitVal; x += segmentSize) {
+          pylonPoints.push({ x, y: -limitVal });
+          pylonPoints.push({ x, y: limitVal });
+        }
+        for (let y = -limitVal + segmentSize; y < limitVal; y += segmentSize) {
+          pylonPoints.push({ x: -limitVal, y });
+          pylonPoints.push({ x: limitVal, y });
+        }
+
+        pylonPoints.forEach((pt) => {
+          // Column pylon
+          push3DBox(pt.x, pt.y, 0, 8, 8, 25, {
+            top: '#FFFFFF',
+            front: tColor,
+            side: '#1E293B',
+          }, 0);
+          // Glowing top cap
+          push3DPyramid(pt.x, pt.y, 25, 8, 8, 6, '#FFFFFF', tColor, 0);
+        });
+      } else {
+        // 1. Corporate HQ building representing the player's enterprise (small corporate island approx -250, 0)
+        push3DBox(-250, 0, 0, 48, 48, 45, {
+          top: '#1E293B',
+          front: pizzeriaColor || '#0F172A',
+          side: '#1E293B'
+        }, 0.2, pizzeriaName || "CORPORACIÓN DELIVER");
+        push3DPyramid(-250, 0, 45, 48, 48, 20, pizzeriaColor || '#38BDF8', '#0284C7', 0.2);
+
+        // 2. Draw floating landmarks/pillars above each territory center so they are easily distinguishable
+        TERRITORIES.forEach(t => {
+          push3DBox(t.cx, t.cy, 0, 16, 16, 10, {
+            top: '#1E293B',
+            front: t.color,
+            side: '#1E293B'
+          }, 0.2, t.name);
+          push3DPyramid(t.cx, t.cy, 10, 16, 16, 6, t.accent, t.color, 0.2);
+        });
+      }
+    }
 
     // PLAYER MODEL GRAPHICS
     // Size and properties depends on the current vehicle!
@@ -1248,26 +1514,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     constructPlayerModel();
 
-    // SORT ALL FACES BACK-TO-FRONT (Painter's Algorithm)
-    // Faces with HIGHER avgDepth (which means further away sz from camera) are drawn FIRST.
-    // Faces with LOWER avgDepth (closer to screen) are drawn LATER (on top!).
+    // Sort to render back to front
     faces.sort((a, b) => b.avgDepth - a.avgDepth);
+
+    const labelsToRender: { text: string; x: number; y: number; depth: number }[] = [];
 
     // DRAW FACES
     faces.forEach((face) => {
       if (face.points.length < 2) return;
 
-      // Class 3D Near Plane Clip: Skip drawing the face entirely if any vertex lies behind or too close to the camera
+      // Class 3D Near Plane Clip: Skip drawing the face entirely if any vertex lies behind or too close to the camera (only in chapters 1 & 2)
       let hasBehind = false;
-      for (const p of face.points) {
-        const dx = p.x - cameraRef.current.x;
-        const dy = p.y - cameraRef.current.y;
-        const dz = p.z - cameraRef.current.z;
-        const ry = dy; // yaw is 0
-        const sz = -ry * Math.sin(0.85) - dz * Math.cos(0.85);
-        if (400 + sz < 10) {
-          hasBehind = true;
-          break;
+      if (chapter !== 3) {
+        for (const p of face.points) {
+          const dx = p.x - cameraRef.current.x;
+          const dy = p.y - cameraRef.current.y;
+          const dz = p.z - cameraRef.current.z;
+          const ry = dy; // yaw is 0
+          const sz = -ry * Math.sin(pitch) - dz * Math.cos(pitch);
+          if (400 + sz < 10) {
+            hasBehind = true;
+            break;
+          }
         }
       }
       if (hasBehind) return;
@@ -1290,23 +1558,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.lineWidth = face.outlineWidth || 0.8;
       ctx.stroke();
 
-      // Draw floating billboards text for buildings / targets
+      // Collect floating billboards text for buildings / targets
       if (face.text) {
         // Average coordinates for centering labels
         const avgX = projected.reduce((s, p) => s + p.x, 0) / projected.length;
         const avgY = projected.reduce((s, p) => s + p.y, 0) / projected.length;
-
-        ctx.font = 'black 9px sans-serif';
-        // Shadow/Glow text box background
-        const txtWidth = ctx.measureText(face.text).width;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-        ctx.fillRect(avgX - txtWidth / 2 - 4, avgY - 14, txtWidth + 8, 14);
-
-        // Core text
-        ctx.fillStyle = '#FED7AA'; // pleasant yellow
-        ctx.textAlign = 'center';
-        ctx.fillText(face.text, avgX, avgY - 4);
+        labelsToRender.push({
+          text: face.text,
+          x: avgX,
+          y: avgY,
+          depth: face.avgDepth
+        });
       }
+    });
+
+    // Draw all collected labels AFTER all faces are drawn so they are never covered by building volumes
+    labelsToRender.sort((a, b) => b.depth - a.depth);
+    labelsToRender.forEach((lbl) => {
+      ctx.font = 'bold 9px sans-serif';
+      const txtWidth = ctx.measureText(lbl.text).width;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(lbl.x - txtWidth / 2 - 5, lbl.y - 14, txtWidth + 10, 15);
+
+      // Core text
+      ctx.fillStyle = '#FED7AA'; // pleasant yellow
+      ctx.textAlign = 'center';
+      ctx.fillText(lbl.text, lbl.x, lbl.y - 4);
     });
 
     // DRAW WATER WAVES SURROUNDING THE ISLAND
@@ -1502,12 +1779,47 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const targetAngle = Math.atan2(distDy, distDx);
   const angleDeg = (targetAngle * 180) / Math.PI;
 
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (chapter !== 3 || insideRegionId !== null) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Get click coordinates relative to the canvas
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    // Convert click coordinates to world coordinates
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    const camZ = cameraRef.current.z || 500;
+    const scale = 400 / camZ;
+
+    const dx = (clickX - width / 2) / scale;
+    const dy = (clickY - height / 2) / scale;
+
+    const clickWorldX = cameraRef.current.x + dx;
+    const clickWorldY = cameraRef.current.y + dy;
+
+    // Now, let's find the nearest territory to this 3D coordinate!
+    const activeTerritory = getTerritoryAt(clickWorldX, clickWorldY);
+    if (activeTerritory) {
+      // If they clicked within 180 world units of the region node
+      const distSq = (clickWorldX - activeTerritory.cx) ** 2 + (clickWorldY - activeTerritory.cy) ** 2;
+      if (distSq < 32400 && onClickRegion) {
+        onClickRegion(activeTerritory.id);
+      }
+    }
+  };
+
   return (
     <div id="canvas-wrapper" className="relative w-full h-full min-h-[350px] bg-slate-900 rounded-3xl border-4 border-slate-700/80 overflow-hidden shadow-inner flex flex-col justify-end select-none">
       <canvas 
         ref={canvasRef} 
         id="game-3d-canvas"
         className="absolute inset-0 w-full h-full block cursor-pointer"
+        onClick={handleCanvasClick}
       />
 
       {/* COMPASS OVERLAY (Top-Left) */}

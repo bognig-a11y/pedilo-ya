@@ -78,7 +78,7 @@ export const VEHICLES_LIST: Vehicle[] = [
     speed: 320,
     price: 20000,
     emoji: '🚁',
-    description: '🚁 ¡El rey de la isla! Puede volar, ignorar colisiones y aproximarse a las esquinas para ganar.',
+    description: '🚁 ¡El rey de la isla! Puede volar e ignorar colisiones. Nota: Debido a su tamaño, solo se usa para movimiento rápido por la isla; al realizar entregas se estacionará automáticamente y usarás el Camión Duplicador de repuesto.',
     color: '#F472B6',
   },
 ];
